@@ -88,6 +88,43 @@ void route_request(client_ctx_t *client)
 
 void send_response(client_ctx_t *client, int status_code, const char *content_type, char *body_to_send)
 {
+#ifdef HAVE_OPENSSL
+  // 如果启用了 HTTPS 且握手完成，使用 SSL 加密写入
+  if (client->ssl && client->ssl_handshake_state == 2)
+  {
+    // 构造完整的 HTTP 响应
+    char header[512];
+    int header_len = sprintf(header,
+                             "HTTP/1.1 %d OK\r\n"
+                             "Content-Type: %s\r\n"
+                             "Content-Length: %zu\r\n"
+                             "Connection: keep-alive\r\n"
+                             "\r\n",
+                             status_code, content_type, body_to_send ? strlen(body_to_send) : 0);
+
+    // 合并 header 和 body
+    size_t total_len = header_len + (body_to_send ? strlen(body_to_send) : 0);
+    char *response_data = malloc(total_len);
+    memcpy(response_data, header, header_len);
+    if (body_to_send)
+    {
+      memcpy(response_data + header_len, body_to_send, strlen(body_to_send));
+    }
+
+    // 使用 SSL 加密并发送
+    ssl_write_encrypted_response(client, response_data, total_len);
+
+    // 清理 body（如果有）
+    if (body_to_send)
+    {
+      free(body_to_send);
+    }
+    free(response_data);
+    return;
+  }
+#endif
+
+  // 普通 HTTP 或 SSL 握手未完成，使用明文发送
   // 1. 创建写入上下文
   write_ctx_t *wctx = malloc(sizeof(write_ctx_t));
   memset(wctx, 0, sizeof(write_ctx_t));

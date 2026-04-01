@@ -1,0 +1,16 @@
+[Unit]
+Description=C Gateway High Performance Service
+After=network.target
+
+[Service]
+Type=simple
+User=qiao
+Group=qiao
+WorkingDirectory=/home/qiao/c-restful-api
+ExecStart=/home/c-restful-api/bin/c_gateway
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

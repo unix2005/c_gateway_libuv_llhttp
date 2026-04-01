@@ -74,68 +74,71 @@ int load_gateway_config(const char *config_file)
     {
       strncpy(g_gateway_config.ssl_key_path, item->valuestring, sizeof(g_gateway_config.ssl_key_path) - 1);
     }
-    
+
     // === 可观测性配置 ===
     cJSON *observability = cJSON_GetObjectItem(gateway, "observability");
-    if (observability) {
-        // 日志配置
-        item = cJSON_GetObjectItem(observability, "enable_logging");
-        g_gateway_config.observability.enable_logging = item ? item->valueint : 1;
-        
-        item = cJSON_GetObjectItem(observability, "log_level");
-        const char* log_level_str = item ? item->valuestring : "info";
-        if (strcmp(log_level_str, "debug") == 0)
-            g_gateway_config.observability.log_level = LOG_LEVEL_DEBUG;
-        else if (strcmp(log_level_str, "warn") == 0)
-            g_gateway_config.observability.log_level = LOG_LEVEL_WARN;
-        else if (strcmp(log_level_str, "error") == 0)
-            g_gateway_config.observability.log_level = LOG_LEVEL_ERROR;
-        else
-            g_gateway_config.observability.log_level = LOG_LEVEL_INFO;
-        
-        item = cJSON_GetObjectItem(observability, "enable_json_log");
-        g_gateway_config.observability.enable_json_log = item ? item->valueint : 1;
-        
-        // 指标配置
-        item = cJSON_GetObjectItem(observability, "enable_metrics");
-        g_gateway_config.observability.enable_metrics = item ? item->valueint : 1;
-        
-        item = cJSON_GetObjectItem(observability, "metrics_port");
-        g_gateway_config.observability.metrics_port = item ? item->valueint : 9090;
-        
-        item = cJSON_GetObjectItem(observability, "metrics_path");
-        strncpy(g_gateway_config.observability.metrics_path, 
-                item ? item->valuestring : "/metrics",
-                sizeof(g_gateway_config.observability.metrics_path) - 1);
-        
-        // 追踪配置
-        item = cJSON_GetObjectItem(observability, "enable_tracing");
-        g_gateway_config.observability.enable_tracing = item ? item->valueint : 1;
-        
-        item = cJSON_GetObjectItem(observability, "tracing_exporter");
-        strncpy(g_gateway_config.observability.tracing_exporter,
-                item ? item->valuestring : "console",
-                sizeof(g_gateway_config.observability.tracing_exporter) - 1);
-        
-        item = cJSON_GetObjectItem(observability, "tracing_endpoint");
-        strncpy(g_gateway_config.observability.tracing_endpoint,
-                item ? item->valuestring : "http://localhost:14268/api/traces",
-                sizeof(g_gateway_config.observability.tracing_endpoint) - 1);
-        
-        item = cJSON_GetObjectItem(observability, "tracing_sample_rate");
-        g_gateway_config.observability.tracing_sample_rate = item ? item->valuedouble : 1.0;
-    } else {
-        // 默认值
-        g_gateway_config.observability.enable_logging = 1;
+    if (observability)
+    {
+      // 日志配置
+      item = cJSON_GetObjectItem(observability, "enable_logging");
+      g_gateway_config.observability.enable_logging = item ? item->valueint : 1;
+
+      item = cJSON_GetObjectItem(observability, "log_level");
+      const char *log_level_str = item ? item->valuestring : "info";
+      if (strcmp(log_level_str, "debug") == 0)
+        g_gateway_config.observability.log_level = LOG_LEVEL_DEBUG;
+      else if (strcmp(log_level_str, "warn") == 0)
+        g_gateway_config.observability.log_level = LOG_LEVEL_WARN;
+      else if (strcmp(log_level_str, "error") == 0)
+        g_gateway_config.observability.log_level = LOG_LEVEL_ERROR;
+      else
         g_gateway_config.observability.log_level = LOG_LEVEL_INFO;
-        g_gateway_config.observability.enable_json_log = 1;
-        g_gateway_config.observability.enable_metrics = 1;
-        g_gateway_config.observability.metrics_port = 9090;
-        strcpy(g_gateway_config.observability.metrics_path, "/metrics");
-        g_gateway_config.observability.enable_tracing = 1;
-        strcpy(g_gateway_config.observability.tracing_exporter, "console");
-        strcpy(g_gateway_config.observability.tracing_endpoint, "http://localhost:14268/api/traces");
-        g_gateway_config.observability.tracing_sample_rate = 1.0;
+
+      item = cJSON_GetObjectItem(observability, "enable_json_log");
+      g_gateway_config.observability.enable_json_log = item ? item->valueint : 1;
+
+      // 指标配置
+      item = cJSON_GetObjectItem(observability, "enable_metrics");
+      g_gateway_config.observability.enable_metrics = item ? item->valueint : 1;
+
+      item = cJSON_GetObjectItem(observability, "metrics_port");
+      g_gateway_config.observability.metrics_port = item ? item->valueint : 9090;
+
+      item = cJSON_GetObjectItem(observability, "metrics_path");
+      strncpy(g_gateway_config.observability.metrics_path,
+              item ? item->valuestring : "/metrics",
+              sizeof(g_gateway_config.observability.metrics_path) - 1);
+
+      // 追踪配置
+      item = cJSON_GetObjectItem(observability, "enable_tracing");
+      g_gateway_config.observability.enable_tracing = item ? item->valueint : 1;
+
+      item = cJSON_GetObjectItem(observability, "tracing_exporter");
+      strncpy(g_gateway_config.observability.tracing_exporter,
+              item ? item->valuestring : "console",
+              sizeof(g_gateway_config.observability.tracing_exporter) - 1);
+
+      item = cJSON_GetObjectItem(observability, "tracing_endpoint");
+      strncpy(g_gateway_config.observability.tracing_endpoint,
+              item ? item->valuestring : "http://localhost:14268/api/traces",
+              sizeof(g_gateway_config.observability.tracing_endpoint) - 1);
+
+      item = cJSON_GetObjectItem(observability, "tracing_sample_rate");
+      g_gateway_config.observability.tracing_sample_rate = item ? item->valuedouble : 1.0;
+    }
+    else
+    {
+      // 默认值
+      g_gateway_config.observability.enable_logging = 1;
+      g_gateway_config.observability.log_level = LOG_LEVEL_INFO;
+      g_gateway_config.observability.enable_json_log = 1;
+      g_gateway_config.observability.enable_metrics = 1;
+      g_gateway_config.observability.metrics_port = 9090;
+      strcpy(g_gateway_config.observability.metrics_path, "/metrics");
+      g_gateway_config.observability.enable_tracing = 1;
+      strcpy(g_gateway_config.observability.tracing_exporter, "console");
+      strcpy(g_gateway_config.observability.tracing_endpoint, "http://localhost:14268/api/traces");
+      g_gateway_config.observability.tracing_sample_rate = 1.0;
     }
 
     printf("[Config] 网关配置已加载\n");
@@ -145,14 +148,14 @@ int load_gateway_config(const char *config_file)
     printf("  - HTTPS: %s\n", g_gateway_config.enable_https ? "enabled" : "disabled");
     printf("  - 日志路径：%s\n", g_gateway_config.log_path);
     printf("  - 健康检查间隔：%dms\n", g_gateway_config.health_check_interval);
-    
+
     // 打印可观测性配置
     printf("\n[Config] === 可观测性配置 ===\n");
     printf("  - 日志：%s (级别：%s, JSON: %s)\n",
            g_gateway_config.observability.enable_logging ? "enabled" : "disabled",
-           g_gateway_config.observability.log_level == LOG_LEVEL_DEBUG ? "DEBUG" :
-           g_gateway_config.observability.log_level == LOG_LEVEL_INFO ? "INFO" :
-           g_gateway_config.observability.log_level == LOG_LEVEL_WARN ? "WARN" : "ERROR",
+           g_gateway_config.observability.log_level == LOG_LEVEL_DEBUG ? "DEBUG" : g_gateway_config.observability.log_level == LOG_LEVEL_INFO ? "INFO"
+                                                                               : g_gateway_config.observability.log_level == LOG_LEVEL_WARN   ? "WARN"
+                                                                                                                                              : "ERROR",
            g_gateway_config.observability.enable_json_log ? "yes" : "no");
     printf("  - 指标：%s (端口：%d, 路径：%s)\n",
            g_gateway_config.observability.enable_metrics ? "enabled" : "disabled",
@@ -162,7 +165,7 @@ int load_gateway_config(const char *config_file)
            g_gateway_config.observability.enable_tracing ? "enabled" : "disabled",
            g_gateway_config.observability.tracing_exporter,
            g_gateway_config.observability.tracing_sample_rate * 100.0);
-    
+
     if (g_gateway_config.enable_https)
     {
       printf("  - SSL 证书：%s\n", g_gateway_config.ssl_cert_path);
@@ -250,7 +253,7 @@ int load_service_config(const char *config_file)
       int is_ipv6 = ipv6_obj ? ipv6_obj->valueint : 0;
 
       service_register_with_ipv6(name_obj->valuestring,
-                                 NULL,  // description 从配置文件读取时为 NULL
+                                 NULL, // description 从配置文件读取时为 NULL
                                  path_obj->valuestring,
                                  host_obj->valuestring,
                                  port_obj->valueint,
