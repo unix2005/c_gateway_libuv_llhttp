@@ -1,0 +1,37 @@
+var metrics_8c =
+[
+    [ "metric_counter_t", "structmetric__counter__t.html", "structmetric__counter__t" ],
+    [ "histogram_bucket_t", "structhistogram__bucket__t.html", "structhistogram__bucket__t" ],
+    [ "metric_histogram_t", "structmetric__histogram__t.html", "structmetric__histogram__t" ],
+    [ "metrics_client_t", "structmetrics__client__t.html", "structmetrics__client__t" ],
+    [ "APPEND", "metrics_8c.html#ae1d4fee8a27fa8cf302c56691a53607d", null ],
+    [ "metric_type_t", "metrics_8c.html#aeba4fa423000b6f6d490e8fa4f720dec", [
+      [ "METRIC_COUNTER", "metrics_8c.html#aeba4fa423000b6f6d490e8fa4f720deca0e91f8f1d26b141699cad1db659ae957", null ],
+      [ "METRIC_GAUGE", "metrics_8c.html#aeba4fa423000b6f6d490e8fa4f720decaefd96e005489063e143bc0eee05442b0", null ],
+      [ "METRIC_HISTOGRAM", "metrics_8c.html#aeba4fa423000b6f6d490e8fa4f720deca0b955d575863072ee05da8388c4cd9d3", null ]
+    ] ],
+    [ "counter_dec", "metrics_8c.html#aa718c8d4287be326311ee46a76daf8ee", null ],
+    [ "counter_inc", "metrics_8c.html#aea82ee5b214a7d2c88e3956d83d0f912", null ],
+    [ "histogram_observe", "metrics_8c.html#a98105affe91c1642ea98c4875b8083b3", null ],
+    [ "init_metrics", "metrics_8c.html#aa3075443add051324f492718a6cd8b5b", null ],
+    [ "metrics_alloc_buffer", "metrics_8c.html#a1ed4faf034534b8b81424cfdc383f7fc", null ],
+    [ "metrics_generate_output", "metrics_8c.html#ac53e4e895a6c4d9800bae3b754a6c29b", null ],
+    [ "metrics_init", "metrics_8c.html#a4286615087febd89409af560bfc1a869", null ],
+    [ "metrics_new_connection", "metrics_8c.html#a488f1f3b99803dff1057915f41d220be", null ],
+    [ "metrics_on_close", "metrics_8c.html#a9885f4998844032658dbd8ae47e6c845", null ],
+    [ "metrics_on_write_complete", "metrics_8c.html#ae43d6e1c7b13752d9e5b121eb6dc3e77", null ],
+    [ "metrics_read_cb", "metrics_8c.html#a279eee2778346a99bee17a6edff984e0", null ],
+    [ "metrics_request_end", "metrics_8c.html#a735f82f6cd33ddc42992159b189fff5d", null ],
+    [ "metrics_request_start", "metrics_8c.html#af0116d78caa245fc1da5e0c8bfd3eb7f", null ],
+    [ "metrics_server_start", "metrics_8c.html#af01a165d14d899f3bc231993ce954d81", null ],
+    [ "metrics_server_thread", "metrics_8c.html#a59c52184ed57bcc66ed8448f54e608a0", null ],
+    [ "metrics_upstream_duration", "metrics_8c.html#a482f66941c90169a254e170432e29574", null ],
+    [ "http_request_duration_seconds", "metrics_8c.html#aab44252682332a01ef21c3fb5f19d451", null ],
+    [ "http_request_errors_total", "metrics_8c.html#a8ecf022119f4290f63dea14cb0f22c22", null ],
+    [ "http_requests_in_flight", "metrics_8c.html#a8fa7d0186b300f51db9a1850f5fed571", null ],
+    [ "http_requests_total", "metrics_8c.html#acbcc68e022bb5426a3d9873ccd0dcd60", null ],
+    [ "http_upstream_duration_seconds", "metrics_8c.html#a1bc3d5afda2d5526443abf4f35516b40", null ],
+    [ "metrics_loop", "metrics_8c.html#ab88194f80ea96e768eb550761ab35251", null ],
+    [ "metrics_server", "metrics_8c.html#ac3f5637b33333f05b05bd26206bcae35", null ],
+    [ "request_duration_buckets", "metrics_8c.html#aba8cb4b90bc195fe09d964cc2aec8eac", null ]
+];

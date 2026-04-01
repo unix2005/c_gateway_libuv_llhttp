@@ -1,0 +1,86 @@
+# Doxygen 配置文件 - 微服务网关项目
+
+# 项目基本信息
+PROJECT_NAME           = "微服务网关"
+PROJECT_NUMBER         = "1.0.0"
+PROJECT_BRIEF          = "基于 libuv 的高性能微服务网关"
+PROJECT_LOGO         = ""
+
+# 输入输出配置
+INPUT                  = src include
+INPUT_ENCODING         = UTF-8
+RECURSIVE              = YES
+FILE_PATTERNS          = *.c *.h
+EXCLUDE_PATTERNS       = */.git/* */worker_service/*
+
+# 输出目录
+OUTPUT_DIRECTORY       = docs/doxygen
+
+# HTML 输出
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_COLORSTYLE        = LIGHT
+HTML_TIMESTAMP         = YES
+HTML_DYNAMIC_SECTIONS  = YES
+
+# LaTeX 输出（用于生成 PDF）
+GENERATE_LATEX         = NO
+
+# 文档内容配置
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+CASE_SENSE_NAMES       = NO
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+USE_HTAGS              = NO
+VERBATIM_HEADERS       = YES
+
+# 调用图
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+GRAPHICAL_HIERARCHY    = YES
+DIRECTORY_GRAPH        = YES
+
+# 优化选项
+OPTIMIZE_OUTPUT_FOR_C  = YES
+OPTIMIZE_OUTPUT_JAVA   = NO
+OPTIMIZE_FOR_FORTRAN   = NO
+OPTIMIZE_OUTPUT_VHDL   = NO
+
+# C 语言特定配置
+DISTRIBUTE_GROUP_DOC   = YES
+GROUP_NESTED_COMPOUNDS = NO
+SUBGROUPING            = YES
+
+# 类型定义
+TYPEDEF_HIDES_STRUCT   = NO
+
+# 符号关系
+FULL_PATH_NAMES        = YES
+SHORT_NAMES            = NO
+MULTILINE_CPP_IS_BRIEF = NO
+
+# Javadoc 风格注释
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = NO
+
+# 警告配置
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = NO
+WARN_FORMAT            = "$file:$line: $text"
+
+# 搜索功能
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
+EXTERNAL_SEARCH        = NO
+
+# 其他配置
+ALPHABETICAL_INDEX     = YES
+COLS_IN_ALPHA_INDEX    = 5
+IGNORE_PREFIX          = ""

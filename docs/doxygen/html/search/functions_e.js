@@ -1,0 +1,7 @@
+var searchData=
+[
+  ['tracing_5fadd_5fevent_0',['tracing_add_event',['../tracer_8c.html#a7c7970ce519931b472e710373eb212ab',1,'tracing_add_event(client_ctx_t *ctx, const char *event_name, const char *attributes):&#160;tracer.c'],['../gateway_8h.html#a7c7970ce519931b472e710373eb212ab',1,'tracing_add_event(client_ctx_t *ctx, const char *event_name, const char *attributes):&#160;tracer.c']]],
+  ['tracing_5fexport_5fspan_1',['tracing_export_span',['../tracer_8c.html#a4f8ec72713d3e217e47801613862380f',1,'tracing_export_span(client_ctx_t *ctx, const char *operation, double duration_ms):&#160;tracer.c'],['../gateway_8h.html#a4f8ec72713d3e217e47801613862380f',1,'tracing_export_span(client_ctx_t *ctx, const char *operation, double duration_ms):&#160;tracer.c']]],
+  ['tracing_5fget_5foutgoing_5ftraceparent_2',['tracing_get_outgoing_traceparent',['../tracer_8c.html#abac23c89f85f8459ac57a43ab4d937e1',1,'tracing_get_outgoing_traceparent(client_ctx_t *ctx, char *buffer, size_t size):&#160;tracer.c'],['../gateway_8h.html#abac23c89f85f8459ac57a43ab4d937e1',1,'tracing_get_outgoing_traceparent(client_ctx_t *ctx, char *buffer, size_t size):&#160;tracer.c']]],
+  ['tracing_5finit_5fcontext_3',['tracing_init_context',['../tracer_8c.html#ad4c8a4a3700641f010d2ec7823a4570b',1,'tracing_init_context(client_ctx_t *ctx, const char *incoming_traceparent):&#160;tracer.c'],['../gateway_8h.html#ad4c8a4a3700641f010d2ec7823a4570b',1,'tracing_init_context(client_ctx_t *ctx, const char *incoming_traceparent):&#160;tracer.c']]]
+];

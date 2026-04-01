@@ -15,4 +15,15 @@ $(TARGET): $(SRCS)
 clean:
 	rm -rf bin/*
 
-.PHONY: all clean run
+# 生成 Doxygen 文档
+docs:
+	@echo "正在生成 Doxygen 文档..."
+	doxygen Doxyfile.in
+	@echo "Doxygen 文档已生成：docs/doxygen/html/index.html"
+
+# 清理文档
+clean-docs:
+	rm -rf docs/doxygen
+	@echo "Doxygen 文档已清理"
+
+.PHONY: all clean docs clean-docs
