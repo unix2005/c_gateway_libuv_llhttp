@@ -34,7 +34,7 @@
 
 ```bash
 # 克隆项目
-git clone <repository-url>
+git clone https://github.com/unix2005/c_gateway_libuv_llhttp.git
 cd c-restful-api
 
 # 编译
