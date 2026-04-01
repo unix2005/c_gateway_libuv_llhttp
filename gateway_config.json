@@ -1,0 +1,44 @@
+{
+  "gateway": {
+    "worker_threads": 4,
+    "service_port": 8080,
+    "enable_ipv6": 0,
+    "enable_https": 0,
+    "log_path": "logs/gateway.log",
+    "health_check_interval": 5000,
+    "ssl_cert_path": "certs/server.crt",
+    "ssl_key_path": "certs/server.key"
+  },
+  "services": [
+    {
+      "name": "user-service",
+      "path_prefix": "/api/users",
+      "host": "localhost",
+      "port": 8081,
+      "protocol": "http",
+      "health_endpoint": "/health",
+      "verify_ssl": false,
+      "ipv6": 0
+    },
+    {
+      "name": "order-service",
+      "path_prefix": "/api/orders",
+      "host": "localhost",
+      "port": 8082,
+      "protocol": "http",
+      "health_endpoint": "/health",
+      "verify_ssl": false,
+      "ipv6": 0
+    },
+    {
+      "name": "product-service",
+      "path_prefix": "/api/products",
+      "host": "localhost",
+      "port": 8083,
+      "protocol": "http",
+      "health_endpoint": "/health",
+      "verify_ssl": false,
+      "ipv6": 0
+    }
+  ]
+}

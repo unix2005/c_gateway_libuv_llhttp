@@ -1,0 +1,40 @@
+{
+  "name": "vms_get_employees",
+  "description": "支持 IPv6 和 HTTPS 的多线程工作服务",
+  
+  "host": "192.168.19.10",
+  "port": 8081,
+  "ipv6": false,
+  "https": false,
+  
+  "path_prefix": "/api/employees",
+  "health_endpoint": "/health",
+  "verify_ssl": false,
+  
+  "ssl_cert_file": "certs/server.crt",
+  "ssl_key_file": "certs/server.key",
+  "ssl_ca_file": "certs/ca.crt",
+  "verify_client": false,
+  
+  "gateway": {
+    "host": "192.168.19.10",
+    "port": 8080
+  },
+  
+  "threads": {
+    "count": 4,
+    "max_connections": 1024
+  },
+  
+  "logging": {
+    "file": "logs/worker.log",
+    "level": "INFO",
+    "to_console": true,
+    "to_file": true
+  },
+  
+  "health_check": {
+    "endpoint": "/health",
+    "heartbeat_interval": 30
+  }
+}

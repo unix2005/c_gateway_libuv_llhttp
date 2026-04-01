@@ -1,0 +1,67 @@
+@echo off
+REM Makefile for Worker Service - Windows NMake version
+REM 使用：nmake /f Makefile.win [target]
+
+# 编译器设置
+CC = gcc
+CFLAGS = -std=c99 -O2 -Wall -Wextra -DHAVE_OPENSSL
+LIBS = -luv -lllhttp -lcurl -lcjson -lpthread -lssl -lcrypto
+
+# 目录
+BIN_DIR = bin
+OBJ_DIR = obj
+
+# 目标
+all: dirs $(BIN_DIR)\worker_service_v2.exe $(BIN_DIR)\worker_service_v3.exe $(BIN_DIR)\worker_service_v3_1.exe
+	@echo.
+	@echo ✅ 编译完成！
+	@dir $(BIN_DIR)\*.exe
+
+dirs:
+	@if not exist $(BIN_DIR) mkdir $(BIN_DIR)
+	@if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
+
+# v2
+$(BIN_DIR)\worker_service_v2.exe: $(OBJ_DIR)\worker_service_v2.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+
+$(OBJ_DIR)\worker_service_v2.o: worker_service_v2.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# v3
+$(BIN_DIR)\worker_service_v3.exe: $(OBJ_DIR)\worker_service_v3.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+
+$(OBJ_DIR)\worker_service_v3.o: worker_service_v3.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# v3.1
+$(BIN_DIR)\worker_service_v3_1.exe: $(OBJ_DIR)\worker_service_v3_1.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+
+$(OBJ_DIR)\worker_service_v3_1.o: worker_service_v3_1.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+clean:
+	@echo 正在清理...
+	-rmdir /s /q $(BIN_DIR) $(OBJ_DIR)
+	@echo ✅ 清理完成
+
+help:
+	@echo Worker Service Makefile (Windows NMake)
+	@echo ========================================
+	@echo.
+	@echo 可用目标:
+	@echo   all              - 编译所有版本 ^(默认^)
+	@echo   worker_service_v2 - 编译 v2 版本
+	@echo   worker_service_v3 - 编译 v3 版本
+	@echo   worker_service_v3_1 - 编译 v3.1 版本
+	@echo   clean            - 清理
+	@echo   help             - 显示帮助
+	@echo.
+	@echo 示例:
+	@echo   nmake /f Makefile.win
+	@echo   nmake /f Makefile.win worker_service_v3_1
+	@echo   nmake /f Makefile.win clean
+
+.PHONY: all dirs clean help

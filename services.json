@@ -1,0 +1,44 @@
+{
+  "services": [
+    {
+      "name": "user-service",
+      "path_prefix": "/api/users",
+      "host": "localhost",
+      "port": 8081,
+      "protocol": "http",
+      "health_endpoint": "/health",
+      "verify_ssl": false,
+      "ipv6": false
+    },
+    {
+      "name": "order-service",
+      "path_prefix": "/api/orders",
+      "host": "localhost",
+      "port": 8082,
+      "protocol": "https",
+      "health_endpoint": "/health",
+      "verify_ssl": false,
+      "ipv6": false
+    },
+    {
+      "name": "product-service",
+      "path_prefix": "/api/products",
+      "host": "::1",
+      "port": 8083,
+      "protocol": "http",
+      "health_endpoint": "/health",
+      "verify_ssl": true,
+      "ipv6": true
+    },
+    {
+      "name": "payment-service",
+      "path_prefix": "/api/payments",
+      "host": "192.168.1.100",
+      "port": 8443,
+      "protocol": "https",
+      "health_endpoint": "/api/health",
+      "verify_ssl": false,
+      "ipv6": false
+    }
+  ]
+}

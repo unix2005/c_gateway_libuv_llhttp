@@ -1,0 +1,27 @@
+{
+  "gateway": {
+    "worker_threads": 4,
+    "service_port": 8080,
+    "enable_ipv6": 0,
+    "enable_https": 0,
+    "log_path": "logs/gateway.log",
+    "health_check_interval": 5000,
+    "ssl_cert_path": "certs/server.pem",
+    "ssl_key_path": "certs/server.key",
+    
+    "observability": {
+      "enable_logging": 1,
+      "log_level": "info",
+      "enable_json_log": 1,
+      
+      "enable_metrics": 1,
+      "metrics_port": 9090,
+      "metrics_path": "/metrics",
+      
+      "enable_tracing": 1,
+      "tracing_exporter": "console",
+      "tracing_endpoint": "http://localhost:14268/api/traces",
+      "tracing_sample_rate": 1.0
+    }
+  }
+}
