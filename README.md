@@ -433,8 +433,8 @@ make test
 
 ## 联系方式
 
-- 作者：（您的姓名）
-- Email：（您的邮箱）
+- 作者：（乔水）
+- Email：（83922201@qq.com）
 - GitHub Issues：（问题反馈）
 
 ---
