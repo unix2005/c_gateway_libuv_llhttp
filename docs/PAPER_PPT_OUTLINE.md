@@ -565,8 +565,8 @@ traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
 
 ### 联系方式
 
-📧 Email: （您的邮箱）  
-💻 GitHub: （项目地址）  
+📧 Email: 83922201@qq.com  
+💻 GitHub: https://github.com/unix2005/c_gateway_libuv_llhttp.git
 📄 论文全文：docs/PAPER_MICROSERVICE_GATEWAY.md
 
 ---
