@@ -1,5 +1,9 @@
 #include "gateway.h"
 
+// 全局网关配置
+gateway_config_t g_gateway_config;
+
+
 // 守护进程化
 void daemonize()
 {
@@ -36,7 +40,12 @@ void daemonize()
   umask(0);
 
   // 5. 切换工作目录
-  chdir("/");
+  int ret=0;
+  ret = chdir("/");
+  if ( ret < 0 )
+  {
+    perror("chdir failed");
+  }
 
   // 6. 关闭标准输入输出
   close(0);

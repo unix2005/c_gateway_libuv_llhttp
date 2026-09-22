@@ -88,6 +88,7 @@
 #include <cjson/cJSON.h>
 
 
+#if 0
 // 获取线程 ID 的工具函数
 #ifdef _WIN32
     static inline unsigned long gettid_for_log(void) {
@@ -97,6 +98,7 @@
     static inline pid_t gettid(void) {
         return (pid_t)syscall(SYS_gettid);
     }
+#endif
 #endif
 
 #define POOL_SIZE 8192
@@ -351,9 +353,6 @@ typedef struct {
     // === 可观测性配置 ===
     observability_config_t observability;  ///< 可观测性配置
 } gateway_config_t;
-
-// 全局网关配置
-gateway_config_t g_gateway_config;
 
 // 全局服务注册表
 extern service_registry_t g_registry;

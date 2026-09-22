@@ -16,7 +16,13 @@ int load_gateway_config(const char *config_file)
   fseek(f, 0, SEEK_SET);
 
   char *json_str = malloc(fsize + 1);
-  fread(json_str, 1, fsize, f);
+  size_t rlen=0;
+  rlen = fread(json_str, 1, fsize, f);
+  if ( rlen < 0 )
+  {
+    fprintf(stderr, "[Config] 读取配置文件失败：%s\n", config_file);
+    return -1;
+  }
   json_str[fsize] = '\0';
   fclose(f);
 
@@ -204,7 +210,13 @@ int load_service_config(const char *config_file)
   fseek(f, 0, SEEK_SET);
 
   char *json_str = malloc(fsize + 1);
-  fread(json_str, 1, fsize, f);
+  size_t rlen=0;
+  rlen = fread(json_str, 1, fsize, f);
+  if ( rlen < 0 )
+  {
+    fprintf(stderr, "[Config] 读取配置文件失败：%s\n", config_file);
+    return -1;
+  }
   json_str[fsize] = '\0';
   fclose(f);
 
