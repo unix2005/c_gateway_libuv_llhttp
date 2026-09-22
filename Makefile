@@ -3,7 +3,7 @@ CFLAGS = -O3 -Wall -I./include -g -DHAVE_OPENSSL -std=c99
 LIBS = -luv -lllhttp -lcurl -lpthread -lcjson -lcrypto -lssl
 
 SRCS = src/main.c src/network.c src/service_registry.c src/health_checker.c \
-       src/proxy.c src/config.c src/router.c src/utils.c \
+       src/proxy.c src/async_http.c src/config.c src/router.c src/utils.c \
        src/logger.c src/metrics.c src/tracer.c
 TARGET = bin/c_gateway
 

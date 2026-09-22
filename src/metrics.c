@@ -405,9 +405,35 @@ static void *metrics_server_thread(void *arg)
 
     struct sockaddr_in addr;
     uv_ip4_addr("0.0.0.0", g_gateway_config.observability.metrics_port, &addr);
-    uv_tcp_bind(&metrics_server, (const struct sockaddr *)&addr, 0);
+    int r = uv_tcp_bind(&metrics_server, (const struct sockaddr *)&addr,
+#ifdef UV_TCP_REUSEADDR
+                        UV_TCP_REUSEADDR);
+#else
+                        0);
+#endif
+    if (r != 0)
+    {
+        fprintf(stderr,
+                "[Metrics] 绑定端口 %d 失败：%s（指标服务不可用，网关继续运行）\n",
+                g_gateway_config.observability.metrics_port, uv_strerror(r));
+        uv_close((uv_handle_t *)&metrics_server, NULL);
+        while (uv_loop_alive(metrics_loop))
+            uv_run(metrics_loop, UV_RUN_ONCE);
+        uv_loop_delete(metrics_loop);
+        return NULL;
+    }
 
-    uv_listen((uv_stream_t *)&metrics_server, 128, metrics_new_connection);
+    r = uv_listen((uv_stream_t *)&metrics_server, 128, metrics_new_connection);
+    if (r != 0)
+    {
+        fprintf(stderr, "[Metrics] 监听失败：%s（指标服务不可用，网关继续运行）\n",
+                uv_strerror(r));
+        uv_close((uv_handle_t *)&metrics_server, NULL);
+        while (uv_loop_alive(metrics_loop))
+            uv_run(metrics_loop, UV_RUN_ONCE);
+        uv_loop_delete(metrics_loop);
+        return NULL;
+    }
 
     printf("[Metrics] Prometheus 指标服务器已启动：http://0.0.0.0:%d%s\n",
            g_gateway_config.observability.metrics_port,
@@ -415,6 +441,9 @@ static void *metrics_server_thread(void *arg)
 
     uv_run(metrics_loop, UV_RUN_DEFAULT);
 
+    uv_close((uv_handle_t *)&metrics_server, NULL);
+    while (uv_loop_alive(metrics_loop))
+        uv_run(metrics_loop, UV_RUN_ONCE);
     uv_loop_delete(metrics_loop);
     return NULL;
 }

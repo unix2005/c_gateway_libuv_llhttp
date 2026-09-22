@@ -265,6 +265,8 @@ typedef struct
 
     char url[512]; ///< 请求 URL
 
+    int keep_alive; ///< 是否保持长连接（HTTP/1.1 默认，遇 Connection: close 关闭）
+
     // === 可观测性字段 ===
     uint64_t request_start_time; ///< 请求开始时间戳（纳秒）
     char request_id[64];         ///< 唯一请求 ID
@@ -305,6 +307,7 @@ typedef struct
     uv_buf_t bufs[2]; ///< 缓冲数组 (header + body)
     char *header_ptr; ///< HTTP 头部指针
     char *body_ptr;   ///< HTTP 主体指针
+    int status_code;  ///< 本次响应状态码（用于指标/日志）
 } write_ctx_t;
 
 /**

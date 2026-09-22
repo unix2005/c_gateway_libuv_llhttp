@@ -1,4 +1,5 @@
 #include "gateway.h"
+#include "async_http.h"
 
 // === SSL/TLS 全局变量 ===
 #ifdef HAVE_OPENSSL
@@ -17,6 +18,9 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested, uv_buf_t *buf)
 void on_close(uv_handle_t *handle)
 {
   client_ctx_t *ctx = (client_ctx_t *)handle->data;
+
+  /* 客户端断开：取消其所有在途上游请求，避免向已释放上下文写响应 */
+  async_http_cancel_by_userdata(handle->loop, ctx);
 
 #ifdef HAVE_OPENSSL
   // 清理 SSL 资源
@@ -60,6 +64,9 @@ void on_close(uv_handle_t *handle)
 static void on_client_close(uv_handle_t *handle)
 {
   client_ctx_t *ctx = (client_ctx_t *)handle->data;
+
+  /* 同上：释放前取消在途请求 */
+  async_http_cancel_by_userdata(handle->loop, ctx);
 
   // 记录连接关闭日志
   if (g_gateway_config.observability.enable_logging)
@@ -119,6 +126,10 @@ int on_message_complete(llhttp_t *parser)
 
   // === 指标收集 ===
   metrics_request_start(ctx);
+
+  // 依据 HTTP 版本与 Connection 头判断是否保活（llhttp 权威判定）
+  // 必须在 route_request 之前完成，send_response 需要据此写 Connection 头
+  ctx->keep_alive = llhttp_should_keep_alive(&ctx->parser);
 
   // 执行业务路由
   route_request(ctx);
@@ -197,10 +208,10 @@ void on_write_completed(uv_write_t *req, int status)
   if (g_gateway_config.observability.enable_logging)
   {
     log_info(ctx, "request_completed", "duration=%.3fms status=%d",
-             duration_sec * 1000.0, 200); // TODO: 从响应中获取真实状态码
+             duration_sec * 1000.0, wctx->status_code);
   }
 
-  metrics_request_end(ctx, 200, duration_sec);
+  metrics_request_end(ctx, wctx->status_code, duration_sec);
 
   // === 导出追踪数据 ===
   if (g_gateway_config.observability.enable_tracing)
@@ -217,9 +228,27 @@ void on_write_completed(uv_write_t *req, int status)
   // 最后释放写入上下文结构体本身
   free(wctx);
 
-  // ✅ 关键修复：如果不是 Keep-Alive，关闭客户端连接
-  // 这确保每个请求处理后都能正确清理
-  uv_close((uv_handle_t *)&ctx->handle, on_client_close);
+  // === 真正的 Keep-Alive：保活则重置上下文并继续读下一条请求 ===
+  // 否则关闭连接（ graceful 清理由 on_client_close 完成）
+  if (ctx->keep_alive && status >= 0)
+  {
+    llhttp_init(&ctx->parser, HTTP_REQUEST, &ctx->settings);
+    ctx->parser.data = ctx;
+    ctx->pool.used = 0;
+    ctx->url[0] = '\0';
+    ctx->body_buffer = NULL;
+    ctx->body_len = 0;
+    ctx->request_start_time = get_time_nanoseconds();
+    ctx->request_id[0] = '\0';
+    ctx->trace_id[0] = '\0';
+    ctx->span_id[0] = '\0';
+    ctx->is_sampled = 0;
+    uv_read_start((uv_stream_t *)&ctx->handle, alloc_buffer, on_read);
+  }
+  else
+  {
+    uv_close((uv_handle_t *)&ctx->handle, on_client_close);
+  }
 }
 
 void on_new_connection(uv_stream_t *server, int status)
@@ -545,6 +574,9 @@ void cleanup_ssl_context()
 #ifdef HAVE_OPENSSL
 
 // 执行 SSL 握手
+// 前向声明：握手阶段待发数据的写完成回调
+static void on_ssl_handshake_write_done(uv_write_t *req, int status);
+
 int do_ssl_handshake(client_ctx_t *ctx)
 {
   if (!ctx->ssl || ctx->ssl_handshake_state != 1)
@@ -565,7 +597,8 @@ int do_ssl_handshake(client_ctx_t *ctx)
     {
       uv_buf_t buffer = uv_buf_init(ctx->ssl_write_buffer, ctx->ssl_write_len);
       uv_write_t *req = malloc(sizeof(uv_write_t));
-      uv_write(req, (uv_stream_t *)&ctx->handle, &buffer, 1, NULL);
+      uv_write(req, (uv_stream_t *)&ctx->handle, &buffer, 1,
+               on_ssl_handshake_write_done);
       ctx->ssl_write_buffer = NULL;
       ctx->ssl_write_len = 0;
     }
@@ -629,56 +662,65 @@ int ssl_read_and_process(client_ctx_t *ctx, const char *data, size_t len)
   return 0;
 }
 
-// SSL 写入完成回调
+// 堆拥有的 SSL 写上下文：data 与 req 生命周期一致，回调中释放
+typedef struct {
+    uv_write_t req;
+    char *data;
+} ssl_write_ctx_t;
+
+// SSL 写完成回调：释放堆缓冲与请求结构体（与 gateway.h 声明一致，非 static）
 void on_ssl_write_completed(uv_write_t *req, int status)
 {
-  if (status < 0)
-  {
-    fprintf(stderr, "[SSL] 写入完成错误：%s\n", uv_strerror(status));
-  }
-  free(req);
+    ssl_write_ctx_t *w = (ssl_write_ctx_t *)req;
+    if (status < 0)
+        fprintf(stderr, "[SSL] 写入完成错误：%s\n", uv_strerror(status));
+    free(w->data);
+    free(w);
 }
 
-// SSL 加密写入（简化版本，适合小数据）
+// 握手阶段待发数据的写完成回调（仅释放 req）
+static void on_ssl_handshake_write_done(uv_write_t *req, int status)
+{
+    (void)status;
+    free(req);
+}
+
+// SSL 加密写入（修复：数据拷贝到堆，避免栈内存被异步 uv_write 引用）
 int ssl_write_encrypted_response(client_ctx_t *ctx, const char *data, size_t len)
 {
 #ifdef HAVE_OPENSSL
-  if (!ctx->ssl || ctx->ssl_handshake_state != 2)
-  {
-    return -1;
-  }
+    if (!ctx->ssl || ctx->ssl_handshake_state != 2)
+        return -1;
 
-  // 使用 SSL_write 加密数据
-  int encrypted_len = SSL_write(ctx->ssl, data, len);
-  if (encrypted_len <= 0)
-  {
-    int err = SSL_get_error(ctx->ssl, encrypted_len);
-    fprintf(stderr, "[SSL] 加密写入失败：%d\n", err);
-    return -1;
-  }
-
-  // 从 BIO 读取加密后的数据并发送
-  unsigned char bio_data[16384]; // 足够大的缓冲区
-  int bio_len;
-
-  while ((bio_len = BIO_read(ctx->ssl_bio, bio_data, sizeof(bio_data))) > 0)
-  {
-    uv_buf_t buffer = uv_buf_init((char *)bio_data, bio_len);
-    uv_write_t *req = malloc(sizeof(uv_write_t));
-    memset(req, 0, sizeof(uv_write_t));
-
-    int r = uv_write(req, (uv_stream_t *)&ctx->handle, &buffer, 1, on_ssl_write_completed);
-    if (r < 0)
+    int encrypted_len = SSL_write(ctx->ssl, data, (int)len);
+    if (encrypted_len <= 0)
     {
-      fprintf(stderr, "[SSL] uv_write 失败：%s\n", uv_strerror(r));
-      free(req);
-      return -1;
+        int err = SSL_get_error(ctx->ssl, encrypted_len);
+        fprintf(stderr, "[SSL] 加密写入失败：%d\n", err);
+        return -1;
     }
-  }
 
-  return 0;
+    unsigned char buf[16384];
+    int bio_len;
+    while ((bio_len = BIO_read(ctx->ssl_bio, buf, sizeof(buf))) > 0)
+    {
+        ssl_write_ctx_t *w = (ssl_write_ctx_t *)malloc(sizeof(*w));
+        w->data = (char *)malloc((size_t)bio_len);
+        memcpy(w->data, buf, (size_t)bio_len);
+        uv_buf_t buffer = uv_buf_init(w->data, (size_t)bio_len);
+        int r = uv_write(&w->req, (uv_stream_t *)&ctx->handle, &buffer, 1,
+                         on_ssl_write_completed);
+        if (r < 0)
+        {
+            fprintf(stderr, "[SSL] uv_write 失败：%s\n", uv_strerror(r));
+            free(w->data);
+            free(w);
+            return -1;
+        }
+    }
+    return 0;
 #else
-  return -1;
+    return -1;
 #endif
 }
 

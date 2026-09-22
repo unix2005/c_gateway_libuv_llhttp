@@ -98,9 +98,10 @@ void send_response(client_ctx_t *client, int status_code, const char *content_ty
                              "HTTP/1.1 %d OK\r\n"
                              "Content-Type: %s\r\n"
                              "Content-Length: %zu\r\n"
-                             "Connection: keep-alive\r\n"
+                             "Connection: %s\r\n"
                              "\r\n",
-                             status_code, content_type, body_to_send ? strlen(body_to_send) : 0);
+                             status_code, content_type, body_to_send ? strlen(body_to_send) : 0,
+                             client->keep_alive ? "keep-alive" : "close");
 
     // 合并 header 和 body
     size_t total_len = header_len + (body_to_send ? strlen(body_to_send) : 0);
@@ -136,13 +137,15 @@ void send_response(client_ctx_t *client, int status_code, const char *content_ty
                            "HTTP/1.1 %d OK\r\n"
                            "Content-Type: %s\r\n"
                            "Content-Length: %zu\r\n"
-                           "Connection: keep-alive\r\n"
+                           "Connection: %s\r\n"
                            "\r\n",
-                           status_code, content_type, body_to_send ? strlen(body_to_send) : 0);
+                           status_code, content_type, body_to_send ? strlen(body_to_send) : 0,
+                           client->keep_alive ? "keep-alive" : "close");
 
   // 3. 关联 Body
   // 假设 body_to_send 是由 cJSON_Print 生成的堆指针
   wctx->body_ptr = body_to_send;
+  wctx->status_code = status_code;   // 透传真实状态码，供指标/日志使用
 
   // 4. 设置 uv_buf_t 指向这些堆内存
   wctx->bufs[0] = uv_buf_init(wctx->header_ptr, header_len);

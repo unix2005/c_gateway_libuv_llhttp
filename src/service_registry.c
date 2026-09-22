@@ -136,7 +136,7 @@ int service_register_with_ipv6(const char *name, const char *description,
         printf("[Gateway] 注册新服务：%s (路径前缀：%s, 协议：%s)\n", name, path_prefix, proto_str);
     }
 
-    // 添加服务实例
+    // 添加服务实例（对相同 host+port 幂等，避免心跳重复注册累积）
     pthread_mutex_lock(&existing->lock);
     if (existing->instance_count >= MAX_SERVICE_INSTANCES)
     {
@@ -146,8 +146,25 @@ int service_register_with_ipv6(const char *name, const char *description,
         return -1;
     }
 
-    service_instance_t *inst = &existing->instances[existing->instance_count++];
-    memset(inst, 0, sizeof(service_instance_t)); // ✓ 清零实例
+    service_instance_t *inst = NULL;
+    for (int k = 0; k < existing->instance_count; k++)
+    {
+        if (strcmp(existing->instances[k].host, host) == 0 &&
+            existing->instances[k].port == port)
+        {
+            inst = &existing->instances[k]; // 复用已有实例
+            break;
+        }
+    }
+    if (!inst)
+    {
+        inst = &existing->instances[existing->instance_count++];
+        memset(inst, 0, sizeof(service_instance_t)); // ✓ 清零实例
+    }
+    else
+    {
+        inst->health = SERVICE_UNKNOWN; // 心跳刷新，重置健康状态
+    }
 
     strncpy(inst->host, host, SERVICE_HOST_LEN - 1);
     inst->port = port;

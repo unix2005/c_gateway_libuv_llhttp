@@ -1,4 +1,5 @@
 #include "gateway.h"
+#include "async_http.h"
 
 // 全局网关配置
 gateway_config_t g_gateway_config;
@@ -95,56 +96,118 @@ typedef struct
   uv_loop_t *loop;
 } worker_context_t;
 
+/* 所有 worker 事件循环，供信号处理优雅停止 */
+#define MAX_WORKER_LOOPS 64
+static uv_loop_t *g_worker_loops[MAX_WORKER_LOOPS];
+static int        g_worker_loop_count = 0;
+
+/* SIGINT/SIGTERM：停止所有 worker 事件循环，触发优雅退出 */
+static void on_signal_stop(int signum)
+{
+  (void)signum;
+  for (int i = 0; i < g_worker_loop_count; i++)
+  {
+    if (g_worker_loops[i])
+      uv_stop(g_worker_loops[i]);
+  }
+}
+
 void *worker_thread(void *arg)
 {
+  (void)arg;
   worker_context_t *ctx = calloc(1, sizeof(worker_context_t));
   ctx->loop = uv_loop_new();
   ctx->server = malloc(sizeof(uv_tcp_t));
-
   uv_tcp_init(ctx->loop, ctx->server);
 
-  // 支持 SO_REUSEPORT/SO_REUSEADDR
-  int fd;
-  uv_fileno((const uv_handle_t *)ctx->server, &fd);
+  int port = g_gateway_config.service_port;
+  int af = g_gateway_config.enable_ipv6 ? AF_INET6 : AF_INET;
+
+  /* 关键修复：必须在 bind 之前创建 socket 并设置 SO_REUSEPORT/SO_REUSEADDR，
+     再通过 uv_tcp_open 交给 libuv（原先在 uv_fileno 时 socket 尚未创建，
+     setsockopt 作用在垃圾 fd 上，导致多 worker 端口复用失效）。 */
+  int fd = socket(af, SOCK_STREAM, 0);
+  if (fd < 0)
+  {
+    perror("[Network] socket() 失败");
+    uv_loop_delete(ctx->loop);
+    free(ctx->server);
+    free(ctx);
+    return NULL;
+  }
+
   int opt = 1;
-#ifdef _WIN32
-  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
-#else
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#ifdef SO_REUSEPORT
   setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 #endif
 
-  // 使用 IPv6 双栈或纯 IPv4
-  if (init_tcp_server_ipv6(ctx->loop, ctx->server, "::", g_gateway_config.service_port) != 0)
+  int r;
+  if (g_gateway_config.enable_ipv6)
   {
-    // IPv6 失败则回退到 IPv4
-    printf("[Network] IPv6 绑定失败，回退到 IPv4\n");
-    struct sockaddr_in addr4;
-    uv_ip4_addr("0.0.0.0", g_gateway_config.service_port, &addr4);
-    uv_tcp_bind(ctx->server, (const struct sockaddr *)&addr4, 0);
+    struct sockaddr_in6 a;
+    uv_ip6_addr("::", port, &a);
+    r = bind(fd, (struct sockaddr *)&a, sizeof(a));
+  }
+  else
+  {
+    struct sockaddr_in a;
+    uv_ip4_addr("0.0.0.0", port, &a);
+    r = bind(fd, (struct sockaddr *)&a, sizeof(a));
   }
 
-  uv_listen((uv_stream_t *)ctx->server, 128, on_new_connection);
+  if (r < 0)
+  {
+    perror("[Network] bind() 失败");
+    close(fd);
+    uv_loop_delete(ctx->loop);
+    free(ctx->server);
+    free(ctx);
+    return NULL;
+  }
+
+  /* 将已绑定 socket 移交给 libuv（非阻塞由 uv_tcp_open 设置） */
+  r = uv_tcp_open(ctx->server, fd);
+  if (r != 0)
+  {
+    fprintf(stderr, "[Network] uv_tcp_open 失败：%s\n", uv_strerror(r));
+    close(fd);
+    uv_loop_delete(ctx->loop);
+    free(ctx->server);
+    free(ctx);
+    return NULL;
+  }
+
+  r = uv_listen((uv_stream_t *)ctx->server, 128, on_new_connection);
+  if (r != 0)
+  {
+    fprintf(stderr, "[Network] uv_listen 失败：%s\n", uv_strerror(r));
+    uv_close((uv_handle_t *)ctx->server, NULL);
+    while (uv_loop_alive(ctx->loop))
+      uv_run(ctx->loop, UV_RUN_ONCE);
+    uv_loop_delete(ctx->loop);
+    free(ctx->server);
+    free(ctx);
+    return NULL;
+  }
+
+  /* 记录 loop 供信号处理器停止 */
+  if (g_worker_loop_count < MAX_WORKER_LOOPS)
+    g_worker_loops[g_worker_loop_count++] = ctx->loop;
 
   printf("[Thread %d] 网关正在监听 %d 端口... (IPv6: %s, HTTPS: %s)\n",
-         gettid(), g_gateway_config.service_port,
+         gettid(), port,
          g_gateway_config.enable_ipv6 ? "enabled" : "disabled",
          g_gateway_config.enable_https ? "enabled" : "disabled");
 
-  // 运行事件循环
+  /* 运行事件循环（被 uv_stop 停止后退出） */
   uv_run(ctx->loop, UV_RUN_DEFAULT);
 
-  // ✅ 优雅退出：确保所有 handle 都已关闭
-  // 停止接受新连接
+  /* 优雅退出：关闭监听句柄，排空循环，确认无活跃 handle 后再删除 */
   uv_close((uv_handle_t *)ctx->server, NULL);
-
-  // 持续运行事件循环直到所有活跃 handle 都关闭完成
-  // 注意：不能使用 uv_loop_close 检查，因为它会返回 UV_EBUSY 即使 handle 正在关闭中
   while (uv_loop_alive(ctx->loop))
-  {
     uv_run(ctx->loop, UV_RUN_ONCE);
-  }
 
-  // 现在 loop 已经完全干净，可以安全删除
   free(ctx->server);
   uv_loop_delete(ctx->loop);
   free(ctx);
@@ -164,6 +227,10 @@ int main(int argc, char *argv[])
 {
   // 忽略 SIGPIPE 防止客户端断连导致进程退出
   signal(SIGPIPE, SIG_IGN);
+
+  // SIGINT/SIGTERM：优雅停止所有 worker 事件循环
+  signal(SIGINT, on_signal_stop);
+  signal(SIGTERM, on_signal_stop);
 
   printf("=== 微服务网关启动 (HTTPS + IPv6 支持) ===\n");
 
@@ -204,8 +271,8 @@ int main(int argc, char *argv[])
     printf("[SSL] ✓ SSL/TLS 和 BIO 初始化完成\n");
   }
 
-  // 初始化 CURL（支持 SSL/TLS）
-  curl_global_init(CURL_GLOBAL_DEFAULT);
+  // 初始化异步转发模块（内部调用 curl_global_init）
+  async_http_global_init();
 
   service_registry_init();
 
@@ -246,8 +313,8 @@ int main(int argc, char *argv[])
     cleanup_ssl_context();
   }
 
-  // 清理 CURL
-  curl_global_cleanup();
+  // 清理异步转发模块
+  async_http_global_cleanup();
 
   return 0;
 }
