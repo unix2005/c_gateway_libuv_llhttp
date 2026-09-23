@@ -134,8 +134,9 @@ void tracing_init_context(client_ctx_t *ctx, const char *incoming_traceparent)
 static void export_to_console(const char *trace_id, const char *span_id,
                               const char *operation, double duration_ms)
 {
-    printf("[Tracing] trace=%s span=%s op=%s duration=%.3fms\n",
-           trace_id, span_id, operation, duration_ms);
+    log_debug(NULL, "trace_export_console",
+              "trace=%s span=%s op=%s duration=%.3fms",
+              trace_id, span_id, operation, duration_ms);
 }
 
 // 导出到 Jaeger/Zipkin（简化版 Thrift/JSON over HTTP）

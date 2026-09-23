@@ -346,7 +346,7 @@ static void metrics_read_cb(uv_stream_t *client, ssize_t nread, const uv_buf_t *
     {
         if (nread != UV_EOF)
         {
-            fprintf(stderr, "[Metrics] Read error: %s\n", uv_err_name(nread));
+            log_error(NULL, "metrics_read_error", "Read error: %s", uv_err_name(nread));
         }
         // 修复：正确获取 client 指针
         metrics_client_t *mc = (metrics_client_t *)client->data;
@@ -384,7 +384,7 @@ static void metrics_new_connection(uv_stream_t *server, int status)
 {
     if (status < 0)
     {
-        fprintf(stderr, "[Metrics] New connection error: %s\n", uv_strerror(status));
+        log_error(NULL, "metrics_conn_error", "New connection error: %s", uv_strerror(status));
         return;
     }
 
@@ -433,9 +433,9 @@ static void *metrics_server_thread(void *arg)
 #endif
     if (r != 0)
     {
-        fprintf(stderr,
-                "[Metrics] 绑定端口 %d 失败：%s（指标服务不可用，网关继续运行）\n",
-                g_gateway_config.observability.metrics_port, uv_strerror(r));
+        log_warn(NULL, "metrics_bind_failed",
+                 "绑定端口 %d 失败：%s（指标服务不可用，网关继续运行）",
+                 g_gateway_config.observability.metrics_port, uv_strerror(r));
         uv_close((uv_handle_t *)&metrics_server, NULL);
         uv_close((uv_handle_t *)&g_metrics_async, NULL);
         while (uv_loop_alive(metrics_loop))
@@ -447,8 +447,9 @@ static void *metrics_server_thread(void *arg)
     r = uv_listen((uv_stream_t *)&metrics_server, 128, metrics_new_connection);
     if (r != 0)
     {
-        fprintf(stderr, "[Metrics] 监听失败：%s（指标服务不可用，网关继续运行）\n",
-                uv_strerror(r));
+        log_warn(NULL, "metrics_listen_failed",
+                 "监听失败：%s（指标服务不可用，网关继续运行）",
+                 uv_strerror(r));
         uv_close((uv_handle_t *)&metrics_server, NULL);
         uv_close((uv_handle_t *)&g_metrics_async, NULL);
         while (uv_loop_alive(metrics_loop))
@@ -457,9 +458,10 @@ static void *metrics_server_thread(void *arg)
         return NULL;
     }
 
-    printf("[Metrics] Prometheus 指标服务器已启动：http://0.0.0.0:%d%s\n",
-           g_gateway_config.observability.metrics_port,
-           g_gateway_config.observability.metrics_path);
+    log_info(NULL, "metrics_server_started",
+             "Prometheus 指标服务器已启动：http://0.0.0.0:%d%s",
+             g_gateway_config.observability.metrics_port,
+             g_gateway_config.observability.metrics_path);
 
     uv_run(metrics_loop, UV_RUN_DEFAULT);
 

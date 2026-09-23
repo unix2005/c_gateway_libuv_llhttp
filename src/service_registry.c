@@ -7,7 +7,7 @@ void service_registry_init()
     memset(&g_registry, 0, sizeof(g_registry));
     pthread_mutex_init(&g_registry.lock, NULL);
 
-    printf("[Gateway] 服务注册表初始化完成\n");
+    log_info(NULL, "registry_init", "服务注册表初始化完成");
 }
 
 // IP 地址解析（支持 IPv4、IPv6 和域名）
@@ -49,7 +49,7 @@ int parse_ip_address(const char *host, ip_address_t *addr)
         int error = getaddrinfo(host, NULL, &hints, &res);
         if (error != 0)
         {
-            fprintf(stderr, "[DNS] 无法解析主机：%s\n", host);
+            log_warn(NULL, "dns_resolve_failed", "无法解析主机：%s", host);
             // 即使解析失败，也保留域名，后续由 libcurl 处理
             addr->is_ipv6 = 0;
             return 0; // 不返回错误，允许使用域名
@@ -61,14 +61,14 @@ int parse_ip_address(const char *host, ip_address_t *addr)
             addr->is_ipv6 = 1;
             struct sockaddr_in6 *ipv6_addr = (struct sockaddr_in6 *)res->ai_addr;
             inet_ntop(AF_INET6, &ipv6_addr->sin6_addr, addr->address, sizeof(addr->address));
-            printf("[DNS] 解析 %s -> IPv6: %s\n", host, addr->address);
+            log_debug(NULL, "dns_resolved", "解析 %s -> IPv6: %s", host, addr->address);
         }
         else
         {
             addr->is_ipv6 = 0;
             struct sockaddr_in *ipv4_addr = (struct sockaddr_in *)res->ai_addr;
             inet_ntop(AF_INET, &ipv4_addr->sin_addr, addr->address, sizeof(addr->address));
-            printf("[DNS] 解析 %s -> IPv4: %s\n", host, addr->address);
+            log_debug(NULL, "dns_resolved", "解析 %s -> IPv4: %s", host, addr->address);
         }
 
         freeaddrinfo(res);
@@ -77,8 +77,9 @@ int parse_ip_address(const char *host, ip_address_t *addr)
     {
         // 直接 IP 地址，检测 IPv4/IPv6
         addr->is_ipv6 = (strchr(host, ':') != NULL) ? 1 : 0;
-        printf("[IP] 直接使用%s地址：%s\n",
-               addr->is_ipv6 ? "IPv6" : "IPv4", host);
+        log_debug(NULL, "ip_direct",
+                   "直接使用%s地址：%s",
+                   addr->is_ipv6 ? "IPv6" : "IPv4", host);
     }
 
     return 0;
@@ -116,7 +117,7 @@ int service_register_with_ipv6(const char *name, const char *description,
         if (g_registry.service_count >= MAX_SERVICES)
         {
             pthread_mutex_unlock(&g_registry.lock);
-            fprintf(stderr, "[Gateway] 服务数量已达上限\n");
+            log_error(NULL, "registry_full", "服务数量已达上限");
             return -1;
         }
 
@@ -133,7 +134,8 @@ int service_register_with_ipv6(const char *name, const char *description,
         pthread_mutex_init(&existing->lock, NULL);
 
         const char *proto_str = (protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP";
-        printf("[Gateway] 注册新服务：%s (路径前缀：%s, 协议：%s)\n", name, path_prefix, proto_str);
+        log_info(NULL, "registry_service_added",
+                 "注册新服务：%s (路径前缀：%s, 协议：%s)", name, path_prefix, proto_str);
     }
 
     // 添加服务实例（对相同 host+port 幂等，避免心跳重复注册累积）
@@ -142,7 +144,7 @@ int service_register_with_ipv6(const char *name, const char *description,
     {
         pthread_mutex_unlock(&existing->lock);
         pthread_mutex_unlock(&g_registry.lock);
-        fprintf(stderr, "[Gateway] 服务 %s 实例数已达上限\n", name);
+        log_error(NULL, "registry_instances_full", "服务 %s 实例数已达上限", name);
         return -1;
     }
 
@@ -201,8 +203,9 @@ int service_register_with_ipv6(const char *name, const char *description,
 
     const char *proto_str = (protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP";
     const char *ip_ver = is_ipv6 ? "IPv6" : "IPv4";
-    printf("[Gateway] 服务实例注册：%s -> [%s] %s:%d (%s)\n",
-           name, ip_ver, host, port, proto_str);
+    log_info(NULL, "registry_instance_added",
+             "服务实例注册：%s -> [%s] %s:%d (%s)",
+             name, ip_ver, host, port, proto_str);
     return 0;
 }
 
@@ -233,7 +236,8 @@ int service_deregister(const char *name, const char *host, int port)
                     pthread_mutex_unlock(&svc->lock);
                     pthread_mutex_unlock(&g_registry.lock);
 
-                    printf("[Gateway] 服务实例注销：%s -> %s:%d\n", name, host, port);
+                    log_info(NULL, "registry_instance_removed",
+                             "服务实例注销：%s -> %s:%d", name, host, port);
                     return 0;
                 }
             }
@@ -254,16 +258,16 @@ service_t *service_find_by_path(const char *path)
     {
         service_t *svc = &g_registry.services[i];
 
-        printf("[Gateway] [%s] 查找服务路径：%s\n", path, svc->path_prefix);
+        log_debug(NULL, "registry_lookup", "查找服务路径：%s (前缀 %s)", path, svc->path_prefix);
         // 检查路径是否匹配服务前缀
         if (strncmp(path, svc->path_prefix, strlen(svc->path_prefix)) == 0)
         {
             pthread_mutex_unlock(&g_registry.lock);
-            printf("[Gateway] [%s] 找到服务路径：%s\n", path, svc->path_prefix);
+            log_debug(NULL, "registry_lookup_hit", "找到服务路径：%s (前缀 %s)", path, svc->path_prefix);
             return svc;
         }
     }
-    printf("[Gateway] [%s] 未找到服务路径\n", path);
+    log_debug(NULL, "registry_lookup_miss", "未找到服务路径：%s", path);
     pthread_mutex_unlock(&g_registry.lock);
     return NULL;
 }
@@ -300,9 +304,10 @@ service_instance_t *service_select_instance(service_t *service)
     {
         const char *proto_str = (selected->protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP";
         const char *ip_ver = selected->ip_addr.is_ipv6 ? "IPv6" : "IPv4";
-        printf("[Gateway] 选择服务实例：%s -> [%s] %s:%d (%s) [请求数：%d]\n",
-               service->name, ip_ver, selected->host, selected->port,
-               proto_str, selected->request_count);
+        log_debug(NULL, "registry_instance_selected",
+                   "选择服务实例：%s -> [%s] %s:%d (%s) [请求数：%d]",
+                   service->name, ip_ver, selected->host, selected->port,
+                   proto_str, selected->request_count);
     }
 
     return selected;

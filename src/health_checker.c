@@ -23,10 +23,11 @@ size_t health_write_callback(void *contents, size_t size, size_t nmemb, void *us
 // 从注册表中移除服务实例
 static void remove_unhealthy_service(service_t *svc, int instance_index)
 {
-  printf("[Health] ✗ 服务 %s:%d 连续 %d 次检查失败，从注册表移除\n",
-         svc->instances[instance_index].host,
-         svc->instances[instance_index].port,
-         MAX_FAILURE_COUNT);
+  log_warn(NULL, "health_instance_removed",
+           "服务 %s:%d 连续 %d 次检查失败，从注册表移除",
+           svc->instances[instance_index].host,
+           svc->instances[instance_index].port,
+           MAX_FAILURE_COUNT);
 
   // 将该实例之后的所有实例前移
   for (int i = instance_index; i < svc->instance_count - 1; i++)
@@ -43,14 +44,16 @@ static void remove_unhealthy_service(service_t *svc, int instance_index)
     svc->current_instance = 0;
   }
 
-  printf("[Health] 当前服务 %s 剩余实例数：%d\n", svc->name, svc->instance_count);
+  log_info(NULL, "health_remaining_instances",
+           "当前服务 %s 剩余实例数：%d", svc->name, svc->instance_count);
 }
 
 // 从注册表中删除整个服务定义
 static void remove_service_from_registry(service_registry_t *registry, int service_index)
 {
-  printf("[Health] ✗ 服务 %s 已无健康实例，从注册表删除整个服务\n",
-         registry->services[service_index].name);
+  log_warn(NULL, "health_service_removed",
+           "服务 %s 已无健康实例，从注册表删除整个服务",
+           registry->services[service_index].name);
 
   // 将该服务之后的所有服务前移
   for (int i = service_index; i < registry->service_count - 1; i++)
@@ -61,7 +64,7 @@ static void remove_service_from_registry(service_registry_t *registry, int servi
   // 减少服务总数
   registry->service_count--;
 
-  printf("[Health] 注册表剩余服务数：%d\n", registry->service_count);
+  log_info(NULL, "health_remaining_services", "注册表剩余服务数：%d", registry->service_count);
 }
 
 void check_service_health(service_instance_t *instance)
@@ -111,7 +114,7 @@ void check_service_health(service_instance_t *instance)
     }
   }
 
-  printf("[Health] 检查：%s\n", url);
+  log_debug(NULL, "health_check", "检查：%s", url);
   CURLcode res = curl_easy_perform(curl);
 
   long http_code = 0;
@@ -121,20 +124,22 @@ void check_service_health(service_instance_t *instance)
   {
     instance->health = SERVICE_HEALTHY;
     instance->failure_count = 0; // ✓ 重置失败计数
-    printf("[Health] ✓ %s:%d (%s) 健康 [HTTP %ld]\n",
-           instance->host, instance->port,
-           (instance->protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP",
-           http_code);
+    log_info(NULL, "health_check_ok",
+             "服务 %s:%d (%s) 健康 [HTTP %ld]",
+             instance->host, instance->port,
+             (instance->protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP",
+             http_code);
   }
   else
   {
     instance->health = SERVICE_UNHEALTHY;
     instance->failure_count++; // ✓ 增加失败计数
-    printf("[Health] ✗ %s:%d (%s) 不健康 [HTTP %ld, error: %s] (失败次数：%d/%d)\n",
-           instance->host, instance->port,
-           (instance->protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP",
-           http_code, curl_easy_strerror(res),
-           instance->failure_count, MAX_FAILURE_COUNT);
+    log_warn(NULL, "health_check_failed",
+             "服务 %s:%d (%s) 不健康 [HTTP %ld, error: %s] (失败次数：%d/%d)",
+             instance->host, instance->port,
+             (instance->protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP",
+             http_code, curl_easy_strerror(res),
+             instance->failure_count, MAX_FAILURE_COUNT);
   }
 
   instance->last_check_time = uv_now(health_loop);
@@ -186,7 +191,7 @@ void start_health_checker()
   uv_async_init(health_loop, &g_health_async, on_health_async_stop);
   g_health_async_ready = 1;
 
-  printf("[Health] 启动健康检查器，间隔 %d ms\n", g_gateway_config.health_check_interval);
+  log_info(NULL, "health_started", "启动健康检查器，间隔 %d ms", g_gateway_config.health_check_interval);
 
   uv_timer_start(&health_timer, health_check_callback,
                  g_gateway_config.health_check_interval, g_gateway_config.health_check_interval);

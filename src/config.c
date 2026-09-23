@@ -147,35 +147,35 @@ int load_gateway_config(const char *config_file)
       g_gateway_config.observability.tracing_sample_rate = 1.0;
     }
 
-    printf("[Config] 网关配置已加载\n");
-    printf("  - 工作线程：%d\n", g_gateway_config.worker_threads);
-    printf("  - 服务端口：%d\n", g_gateway_config.service_port);
-    printf("  - IPv6: %s\n", g_gateway_config.enable_ipv6 ? "enabled" : "disabled");
-    printf("  - HTTPS: %s\n", g_gateway_config.enable_https ? "enabled" : "disabled");
-    printf("  - 日志路径：%s\n", g_gateway_config.log_path);
-    printf("  - 健康检查间隔：%dms\n", g_gateway_config.health_check_interval);
+    log_info(NULL, "config_loaded", "网关配置已加载");
+    log_info(NULL, "config_worker_threads", "工作线程：%d", g_gateway_config.worker_threads);
+    log_info(NULL, "config_service_port", "服务端口：%d", g_gateway_config.service_port);
+    log_info(NULL, "config_ipv6", "IPv6: %s", g_gateway_config.enable_ipv6 ? "enabled" : "disabled");
+    log_info(NULL, "config_https", "HTTPS: %s", g_gateway_config.enable_https ? "enabled" : "disabled");
+    log_info(NULL, "config_log_path", "日志路径：%s", g_gateway_config.log_path);
+    log_info(NULL, "config_health_interval", "健康检查间隔：%dms", g_gateway_config.health_check_interval);
 
     // 打印可观测性配置
-    printf("\n[Config] === 可观测性配置 ===\n");
-    printf("  - 日志：%s (级别：%s, JSON: %s)\n",
-           g_gateway_config.observability.enable_logging ? "enabled" : "disabled",
-           g_gateway_config.observability.log_level == LOG_LEVEL_DEBUG ? "DEBUG" : g_gateway_config.observability.log_level == LOG_LEVEL_INFO ? "INFO"
-                                                                               : g_gateway_config.observability.log_level == LOG_LEVEL_WARN   ? "WARN"
-                                                                                                                                              : "ERROR",
-           g_gateway_config.observability.enable_json_log ? "yes" : "no");
-    printf("  - 指标：%s (端口：%d, 路径：%s)\n",
-           g_gateway_config.observability.enable_metrics ? "enabled" : "disabled",
-           g_gateway_config.observability.metrics_port,
-           g_gateway_config.observability.metrics_path);
-    printf("  - 追踪：%s (导出器：%s, 采样率：%.1f%%)\n",
-           g_gateway_config.observability.enable_tracing ? "enabled" : "disabled",
-           g_gateway_config.observability.tracing_exporter,
-           g_gateway_config.observability.tracing_sample_rate * 100.0);
+    log_info(NULL, "config_observability", "=== 可观测性配置 ===");
+    log_info(NULL, "config_log", "日志：%s (级别：%s, JSON: %s)",
+             g_gateway_config.observability.enable_logging ? "enabled" : "disabled",
+             g_gateway_config.observability.log_level == LOG_LEVEL_DEBUG ? "DEBUG" : g_gateway_config.observability.log_level == LOG_LEVEL_INFO ? "INFO"
+                                                                                                                                           : g_gateway_config.observability.log_level == LOG_LEVEL_WARN   ? "WARN"
+                                                                                                                                                                                                          : "ERROR",
+             g_gateway_config.observability.enable_json_log ? "yes" : "no");
+    log_info(NULL, "config_metrics", "指标：%s (端口：%d, 路径：%s)",
+             g_gateway_config.observability.enable_metrics ? "enabled" : "disabled",
+             g_gateway_config.observability.metrics_port,
+             g_gateway_config.observability.metrics_path);
+    log_info(NULL, "config_tracing", "追踪：%s (导出器：%s, 采样率：%.1f%%)",
+             g_gateway_config.observability.enable_tracing ? "enabled" : "disabled",
+             g_gateway_config.observability.tracing_exporter,
+             g_gateway_config.observability.tracing_sample_rate * 100.0);
 
     if (g_gateway_config.enable_https)
     {
-      printf("  - SSL 证书：%s\n", g_gateway_config.ssl_cert_path);
-      printf("  - SSL 私钥：%s\n", g_gateway_config.ssl_key_path);
+      log_info(NULL, "config_ssl_cert", "SSL 证书：%s", g_gateway_config.ssl_cert_path);
+      log_info(NULL, "config_ssl_key", "SSL 私钥：%s", g_gateway_config.ssl_key_path);
     }
   }
   else
@@ -206,7 +206,7 @@ int load_service_config(const char *config_file)
   FILE *f = fopen(config_file, "r");
   if (!f)
   {
-    fprintf(stderr, "[Config] 无法打开配置文件：%s\n", config_file);
+    log_error(NULL, "service_config_open_failed", "无法打开服务配置文件：%s", config_file);
     return -1;
   }
 
@@ -219,7 +219,7 @@ int load_service_config(const char *config_file)
   rlen = fread(json_str, 1, fsize, f);
   if ( rlen < 0 )
   {
-    fprintf(stderr, "[Config] 读取配置文件失败：%s\n", config_file);
+    log_error(NULL, "service_config_read_failed", "读取服务配置文件失败：%s", config_file);
     return -1;
   }
   json_str[fsize] = '\0';
@@ -230,7 +230,7 @@ int load_service_config(const char *config_file)
 
   if (!root)
   {
-    fprintf(stderr, "[Config] JSON 解析失败\n");
+    log_error(NULL, "service_config_parse_failed", "服务配置 JSON 解析失败");
     return -1;
   }
 
@@ -284,6 +284,6 @@ int load_service_config(const char *config_file)
 
   cJSON_Delete(root);
 
-  printf("[Config] 加载了 %d 个服务配置\n", count);
+  log_info(NULL, "service_config_loaded", "加载了 %d 个服务配置", count);
   return count;
 }

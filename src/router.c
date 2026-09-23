@@ -9,9 +9,10 @@ static int db_count = 3;
 
 void route_request(client_ctx_t *client)
 {
-  printf("[Router] 收到请求：%s %s\n",
-         client->parser.method == HTTP_POST ? "POST" : "GET",
-         client->url);
+  log_debug(NULL, "router_request",
+            "收到请求：%s %s",
+            client->parser.method == HTTP_POST ? "POST" : "GET",
+            client->url);
 
   // 1. 网关健康检查（本地处理）
   if (strcmp(client->url, "/health") == 0)
@@ -57,7 +58,7 @@ void route_request(client_ctx_t *client)
       return;
     }
 
-    printf("[Router] No healthy instances for %s\n", target->name);
+    log_warn(NULL, "router_no_healthy_instance", "No healthy instances for %s", target->name);
 
     // 没有健康的实例
     send_response(client, 503, "application/json",
@@ -73,7 +74,7 @@ void route_request(client_ctx_t *client)
   /*
   if (strcmp(client->url, "/api/data") == 0 && client->parser.method == HTTP_POST)
   {
-    printf("收到 POST 数据：%s\n", client->body_buffer ? client->body_buffer : "空");
+    log_debug(NULL, "router_post_body", "收到 POST 数据：%s", client->body_buffer ? client->body_buffer : "空");
     send_response(client, 201, "application/json", strdup("{\"message\":\"Created\"}"));
   }
   else if (strncmp(client->url, "/api/employees",14) == 0 && client->parser.method == HTTP_GET)
@@ -163,7 +164,7 @@ void send_response(client_ctx_t *client, int status_code, const char *content_ty
 
   if (r < 0)
   {
-    fprintf(stderr, "uv_write failed immediately: %s\n", uv_strerror(r));
+    log_error(NULL, "router_write_failed", "uv_write failed immediately: %s", uv_strerror(r));
     // 如果启动失败，需要手动清理，因为回调不会被触发
     free(wctx->header_ptr);
     if (wctx->body_ptr)
@@ -237,7 +238,7 @@ void handle_get_services(client_ctx_t *client)
  */
 void handle_service_register(client_ctx_t *client)
 {
-  printf("[Router] 收到服务注册请求\n");
+  log_info(NULL, "router_register_request", "收到服务注册请求");
 
   if (!client->body_buffer)
   {
@@ -313,7 +314,7 @@ void handle_service_register(client_ctx_t *client)
  */
 void handle_service_unregister(client_ctx_t *client)
 {
-  printf("[Router] 收到服务注销请求\n");
+  log_info(NULL, "router_unregister_request", "收到服务注销请求");
 
   if (!client->body_buffer)
   {
