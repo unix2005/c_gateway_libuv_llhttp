@@ -79,6 +79,15 @@ void cservice_enable_gateway_register(cservice_t *svc, int enable);
 /** 设置配置文件路径（可选，覆盖 name/host/port 等） */
 void cservice_set_config_file(cservice_t *svc, const char *path);
 
+/** 设置日志输出目录（默认 "logs"），需在 cservice_run 前调用 */
+void cservice_set_log_dir(cservice_t *svc, const char *dir);
+
+/**
+ * 设置日志级别（0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERROR 5=FATAL），默认 INFO。
+ * 需在 cservice_run 前调用。
+ */
+void cservice_set_log_level(cservice_t *svc, int level);
+
 /**
  * 运行服务（阻塞，直到收到 SIGINT/SIGTERM 或调用 cservice_stop）。
  * 内部完成：加载配置、启动服务器、向网关注册、启动心跳。

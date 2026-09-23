@@ -3,6 +3,8 @@
  * @brief libcservice 生命周期与路由管理
  */
 #include "sdk_internal.h"
+#include <q/log.h>
+#include <q/core/types.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -22,10 +24,22 @@ cservice_t *cservice_init(const char *name, const char *host, int port)
     snprintf(svc->gw_host, sizeof(svc->gw_host), "127.0.0.1");
     svc->gw_port = 8080;
     svc->path_prefix[0] = '\0';
+    snprintf(svc->log_dir, sizeof(svc->log_dir), "logs");
+    svc->log_level = Q_LOG_INFO;
 
     svc->route_cap = 16;
     svc->routes = calloc(svc->route_cap, sizeof(sdk_route_t));
     return svc;
+}
+
+void cservice_set_log_dir(cservice_t *svc, const char *dir)
+{
+    if (svc && dir) snprintf(svc->log_dir, sizeof(svc->log_dir), "%s", dir);
+}
+
+void cservice_set_log_level(cservice_t *svc, int level)
+{
+    if (svc) svc->log_level = level;
 }
 
 void cservice_set_threads(cservice_t *svc, int n)
@@ -100,6 +114,10 @@ int cservice_run(cservice_t *svc)
     if (svc->config_file[0])
         sdk_config_load(svc, svc->config_file);
 
+    /* 初始化异步日志（必须在创建任何线程之前调用） */
+    if (q_log_init(svc->log_dir, svc->name, (q_log_level_t)svc->log_level) != Q_OK)
+        sdk_log("WARN", "q_log 初始化失败或已初始化，日志可能降级为同步输出");
+
     /* 向网关注册 + 启动心跳 */
     if (svc->register_enabled)
     {
@@ -164,6 +182,10 @@ void cservice_stop(cservice_t *svc)
 void cservice_destroy(cservice_t *svc)
 {
     if (!svc) return;
+
+    /* 关闭并冲刷异步日志（在其余资源释放前，保证日志不丢） */
+    q_log_close();
+
     for (int i = 0; i < svc->route_count; i++)
         free(svc->routes[i].path);
     free(svc->routes);

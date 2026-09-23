@@ -265,12 +265,22 @@ static void on_new_connection(uv_stream_t *server, int status)
 }
 
 /* ---------- 多 loop 启动 ---------- */
+
+/* uv_walk 回调：关闭 loop 内所有残留 handle（监听 + 长连接），避免 uv_loop_delete 断言 */
+static void close_walk_cb(uv_handle_t *h, void *arg)
+{
+    (void)arg;
+    if (h) uv_close(h, NULL);
+}
+
 static void *worker_loop(void *arg)
 {
     uv_loop_t *loop = (uv_loop_t *)arg;
     uv_run(loop, UV_RUN_DEFAULT);
-
-    /* 优雅退出：关闭监听句柄后排空 */
+    /* 在本线程内完成优雅关闭：关闭所有残留 handle（含长连接）后再关 loop。
+       必须在所属线程内做，避免跨线程操作 loop 导致关闭回调未完成的竞态。 */
+    uv_walk(loop, close_walk_cb, NULL);
+    uv_run(loop, UV_RUN_DEFAULT);
     uv_loop_close(loop);
     return NULL;
 }
@@ -305,12 +315,12 @@ int sdk_server_start_loops(cservice_t *svc)
         if (bind(fd, (struct sockaddr *)&a, sizeof(a)) < 0)
         {
             sdk_log("ERROR", "绑定 %s:%d 失败：%s", svc->host, port, strerror(errno));
-            close(fd); goto fail;
+            close(fd); svc->nloops = i; goto fail;
         }
-        if (uv_tcp_open(server, fd) != 0) { close(fd); goto fail; }
+        if (uv_tcp_open(server, fd) != 0) { close(fd); svc->nloops = i; goto fail; }
         if (uv_listen((uv_stream_t *)server, 128, on_new_connection) != 0)
         {
-            sdk_log("ERROR", "监听失败"); goto fail;
+            sdk_log("ERROR", "监听失败"); svc->nloops = i; goto fail;
         }
 
         svc->loops[i] = loop;
@@ -333,7 +343,7 @@ void sdk_server_stop(cservice_t *svc)
         {
             uv_stop(svc->loops[i]);
             pthread_join(svc->threads[i], NULL);
-            uv_loop_delete(svc->loops[i]);
+            /* worker 线程内部已 uv_loop_close，这里仅释放结构体 */
             free(svc->loops[i]);
         }
         free(svc->servers[i]);

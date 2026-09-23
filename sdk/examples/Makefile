@@ -1,5 +1,5 @@
 CC      ?= gcc
-CFLAGS  ?= -std=c99 -Wall -I../include
+CFLAGS  ?= -std=c99 -Wall -g -I../include
 LDFLAGS ?= -L../dist/lib -lcservice -luv -lllhttp -lcjson -lcurl -lpthread \
            -Wl,-rpath,'$$ORIGIN/../dist/lib'
 

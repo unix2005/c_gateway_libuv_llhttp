@@ -27,21 +27,30 @@ static char *build_payload(cservice_t *svc)
     cJSON_AddNumberToObject(root, "port", svc->port);
     cJSON_AddStringToObject(root, "protocol", "http");
     cJSON_AddStringToObject(root, "path_prefix", svc->path_prefix);
-    cJSON_AddStringToObject(root, "health_check_url", svc->health_path);
+    /* 注意：字段名必须与网关 handle_service_register 读取的 "health_endpoint" 一致 */
+    cJSON_AddStringToObject(root, "health_endpoint", svc->health_path);
     char *s = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     return s;
 }
 
-static int post_json(const char *url, const char *payload)
+/*
+ * 通用 HTTP 方法发送（注册用 POST，注销用 DELETE，两者都带 JSON body）。
+ * 网关对注册要求 200/201，注销要求 200，故成功判定保持原样。
+ */
+static int do_http(const char *method, const char *url, const char *payload)
 {
     CURL *c = curl_easy_init();
     if (!c) return -1;
     struct curl_slist *hdrs = NULL;
     hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
     curl_easy_setopt(c, CURLOPT_URL, url);
-    curl_easy_setopt(c, CURLOPT_POST, 1L);
-    curl_easy_setopt(c, CURLOPT_POSTFIELDS, payload);
+    if (strcmp(method, "POST") == 0)
+        curl_easy_setopt(c, CURLOPT_POST, 1L);
+    else
+        curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, method);
+    if (payload)
+        curl_easy_setopt(c, CURLOPT_POSTFIELDS, payload);
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, hdrs);
     curl_easy_setopt(c, CURLOPT_TIMEOUT, 5L);
     curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
@@ -59,7 +68,7 @@ static int post_json(const char *url, const char *payload)
 int sdk_registry_register(cservice_t *svc)
 {
     char *payload = build_payload(svc);
-    int r = post_json(svc->reg_url, payload);
+    int r = do_http("POST", svc->reg_url, payload);
     free(payload);
     return r;
 }
@@ -67,8 +76,8 @@ int sdk_registry_register(cservice_t *svc)
 int sdk_registry_unregister(cservice_t *svc)
 {
     char *payload = build_payload(svc);
-    /* 网关取消注册接口为 POST /api/services/unregister */
-    int r = post_json(svc->unreg_url, payload);
+    /* 网关取消注册接口为 DELETE /api/services/unregister（带 body） */
+    int r = do_http("DELETE", svc->unreg_url, payload);
     free(payload);
     return r;
 }

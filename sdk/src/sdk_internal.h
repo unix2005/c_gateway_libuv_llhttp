@@ -91,6 +91,10 @@ struct cservice {
     char  path_prefix[128];   /* 注册到网关的路径前缀，默认 ""（兜底） */
     char  config_file[256];
 
+    /* 日志配置（传给 q_log_init） */
+    char  log_dir[256];
+    int   log_level;           /* 取值见 q_log_level_t */
+
     sdk_route_t *routes;
     int          route_count;
     int          route_cap;
