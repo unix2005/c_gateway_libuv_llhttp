@@ -37,6 +37,7 @@ void daemonize()
     exit(0);
   }
 
+  /*
   // 4. 设置文件权限掩码
   umask(0);
 
@@ -48,6 +49,7 @@ void daemonize()
     perror("chdir failed");
   }
 
+  
   // 6. 关闭标准输入输出
   close(0);
   close(1);
@@ -57,6 +59,7 @@ void daemonize()
   open("/dev/null", O_RDONLY);
   open("/dev/null", O_RDWR);
   open("/dev/null", O_RDWR);
+  */
 }
 
 // TCP 服务器初始化（支持 IPv6）
@@ -73,7 +76,7 @@ int init_tcp_server_ipv6(uv_loop_t *loop, uv_tcp_t *server, const char *addr, in
     r = uv_tcp_bind(server, (const struct sockaddr *)&addr6, 0);
     if (r == 0)
     {
-      printf("[Network] IPv6 服务器绑定：%s:%d\n", addr, port);
+      log_info(NULL, "net_bind", "IPv6 服务器绑定：%s:%d", addr, port);
     }
   }
   else
@@ -83,7 +86,7 @@ int init_tcp_server_ipv6(uv_loop_t *loop, uv_tcp_t *server, const char *addr, in
     r = uv_tcp_bind(server, (const struct sockaddr *)&addr4, 0);
     if (r == 0)
     {
-      printf("[Network] IPv4 服务器绑定：%s:%d\n", addr, port);
+      log_info(NULL, "net_bind", "IPv4 服务器绑定：%s:%d", addr, port);
     }
   }
 
@@ -127,7 +130,7 @@ static void on_signal_stop(int signum)
 static void close_handle_walk(uv_handle_t *h, void *arg)
 {
   (void)arg;
-  if (h) uv_close(h, NULL);
+  if (h && !uv_is_closing(h)) uv_close(h, NULL);
 }
 
 static void worker_done(worker_context_t *ctx)
@@ -200,7 +203,7 @@ void *worker_thread(void *arg)
   r = uv_tcp_open(ctx->server, fd);
   if (r != 0)
   {
-    fprintf(stderr, "[Network] uv_tcp_open 失败：%s\n", uv_strerror(r));
+    log_error(NULL, "net_tcp_open_failed", "uv_tcp_open 失败：%s", uv_strerror(r));
     close(fd);
     worker_done(ctx);
     return NULL;
@@ -209,7 +212,7 @@ void *worker_thread(void *arg)
   r = uv_listen((uv_stream_t *)ctx->server, 128, on_new_connection);
   if (r != 0)
   {
-    fprintf(stderr, "[Network] uv_listen 失败：%s\n", uv_strerror(r));
+    log_error(NULL, "net_listen_failed", "uv_listen 失败：%s", uv_strerror(r));
     close(fd);
     worker_done(ctx);
     return NULL;
@@ -223,10 +226,10 @@ void *worker_thread(void *arg)
     g_worker_async[idx] = &ctx->stop_async;
   }
 
-  printf("[Thread %d] 网关正在监听 %d 端口... (IPv6: %s, HTTPS: %s)\n",
-         gettid(), port,
-         g_gateway_config.enable_ipv6 ? "enabled" : "disabled",
-         g_gateway_config.enable_https ? "enabled" : "disabled");
+  log_info(NULL, "worker_listening", "网关正在监听 %d 端口... (IPv6: %s, HTTPS: %s)",
+           port,
+           g_gateway_config.enable_ipv6 ? "enabled" : "disabled",
+           g_gateway_config.enable_https ? "enabled" : "disabled");
 
   /* 运行事件循环（被 uv_stop 停止后退出） */
   uv_run(ctx->loop, UV_RUN_DEFAULT);
@@ -254,7 +257,8 @@ int main(int argc, char *argv[])
   signal(SIGINT, on_signal_stop);
   signal(SIGTERM, on_signal_stop);
 
-  printf("=== 微服务网关启动 (HTTPS + IPv6 支持) ===\n");
+  // 转后台
+  daemonize();
 
   // 加载网关配置
   const char *config_file = "gateway_config.json";
@@ -278,19 +282,19 @@ int main(int argc, char *argv[])
   {
     if (init_ssl_context() != 0)
     {
-      fprintf(stderr, "错误：SSL 初始化失败，无法启动\n");
+      log_error(NULL, "ssl_init_failed", "错误：SSL 初始化失败，无法启动");
       return 1;
     }
 
     // 初始化 SSL BIO 方法
     if (init_ssl_bio() != 0)
     {
-      fprintf(stderr, "错误：SSL BIO 初始化失败\n");
+      log_error(NULL, "ssl_bio_init_failed", "错误：SSL BIO 初始化失败");
       cleanup_ssl_context();
       return 1;
     }
 
-    printf("[SSL] ✓ SSL/TLS 和 BIO 初始化完成\n");
+    log_info(NULL, "ssl_ready", "SSL/TLS 和 BIO 初始化完成");
   }
 
   // 初始化异步转发模块（内部调用 curl_global_init）
@@ -308,7 +312,7 @@ int main(int argc, char *argv[])
      只能依赖运行时 POST 注册且重启即丢失） */
   if (load_service_config("services.json") < 0)
   {
-    fprintf(stderr, "警告：未能加载服务配置文件 services.json\n");
+    log_warn(NULL, "service_config_missing", "警告：未能加载服务配置文件 services.json");
   }
 
   // 启动健康检查线程

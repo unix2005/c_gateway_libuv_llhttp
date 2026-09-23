@@ -222,7 +222,7 @@ void on_read(uv_stream_t *client_stream, ssize_t nread, const uv_buf_t *buf)
   {
     if (nread != UV_EOF)
     {
-      fprintf(stderr, "[Read] 错误：%s\n", uv_strerror(nread));
+      log_error(NULL, "net_read_error", "读错误：%s", uv_strerror(nread));
     }
 
 #ifdef HAVE_OPENSSL
@@ -248,7 +248,7 @@ void on_write_completed(uv_write_t *req, int status)
 
   if (status < 0)
   {
-    fprintf(stderr, "Write error: %s\n", uv_strerror(status));
+    log_error(NULL, "net_write_error", "Write error: %s", uv_strerror(status));
   }
 
   // === 记录请求完成指标和日志 ===
@@ -297,7 +297,12 @@ void on_write_completed(uv_write_t *req, int status)
   }
   else
   {
-    uv_close((uv_handle_t *)&ctx->handle, on_client_close);
+    /* 防御双关：当此关闭由 on_read EOF / 关闭期 uv_walk / abort_bad_request
+       等路径先发起时，挂起的写请求会以 UV_ECANCELED 回调到此，此时 handle
+       已处于 closing 状态，再次 uv_close 会触发 libuv 的 !uv__is_closing 断言。
+       仅在尚未开始关闭时才由这里发起关闭。 */
+    if (!uv_is_closing((uv_handle_t *)&ctx->handle))
+      uv_close((uv_handle_t *)&ctx->handle, on_client_close);
   }
 }
 
@@ -335,7 +340,7 @@ void on_new_connection(uv_stream_t *server, int status)
     ctx->ssl = SSL_new(g_ssl_ctx);
     if (!ctx->ssl)
     {
-      fprintf(stderr, "[SSL] 创建 SSL 连接失败\n");
+      log_error(NULL, "ssl_conn_create_failed", "创建 SSL 连接失败");
       ERR_print_errors_fp(stderr);
       free(ctx);
       return;
@@ -358,7 +363,7 @@ void on_new_connection(uv_stream_t *server, int status)
     SSL_set_accept_state(ctx->ssl);
     ctx->ssl_handshake_state = 1; // 握手中
 
-    printf("[SSL] 新的 TLS 连接建立，开始握手...\n");
+    log_debug(NULL, "ssl_handshake_start", "新的 TLS 连接建立，开始握手...");
   }
   else
   {
@@ -488,7 +493,7 @@ int init_ssl_bio()
     g_bio_method = create_bio_method();
     if (!g_bio_method)
     {
-      fprintf(stderr, "[SSL] 创建 BIO 方法失败\n");
+      log_error(NULL, "ssl_bio_create_failed", "创建 BIO 方法失败");
       return -1;
     }
   }
@@ -512,7 +517,7 @@ int init_ssl_context()
     return 0; // 未启用 HTTPS，直接返回成功
   }
 
-  printf("[SSL] 初始化 OpenSSL 库...\n");
+  log_debug(NULL, "ssl_init", "初始化 OpenSSL 库...");
 
   // 初始化 OpenSSL 库
   SSL_library_init();
@@ -523,7 +528,7 @@ int init_ssl_context()
   g_ssl_ctx = SSL_CTX_new(TLS_server_method());
   if (!g_ssl_ctx)
   {
-    fprintf(stderr, "[SSL] 创建 SSL 上下文失败\n");
+    log_error(NULL, "ssl_ctx_create_failed", "创建 SSL 上下文失败");
     ERR_print_errors_fp(stderr);
     return -1;
   }
@@ -534,10 +539,10 @@ int init_ssl_context()
   // 加载证书文件
   if (strlen(g_gateway_config.ssl_cert_path) > 0)
   {
-    printf("[SSL] 加载证书文件：%s\n", g_gateway_config.ssl_cert_path);
+    log_debug(NULL, "ssl_cert_load", "加载证书文件：%s", g_gateway_config.ssl_cert_path);
     if (SSL_CTX_use_certificate_file(g_ssl_ctx, g_gateway_config.ssl_cert_path, SSL_FILETYPE_PEM) <= 0)
     {
-      fprintf(stderr, "[SSL] 加载证书失败：%s\n", g_gateway_config.ssl_cert_path);
+      log_error(NULL, "ssl_cert_load_failed", "加载证书失败：%s", g_gateway_config.ssl_cert_path);
       ERR_print_errors_fp(stderr);
       SSL_CTX_free(g_ssl_ctx);
       g_ssl_ctx = NULL;
@@ -546,7 +551,7 @@ int init_ssl_context()
   }
   else
   {
-    fprintf(stderr, "[SSL] 错误：未配置 SSL 证书路径\n");
+    log_error(NULL, "ssl_cert_path_missing", "错误：未配置 SSL 证书路径");
     SSL_CTX_free(g_ssl_ctx);
     g_ssl_ctx = NULL;
     return -1;
@@ -555,10 +560,10 @@ int init_ssl_context()
   // 加载私钥文件
   if (strlen(g_gateway_config.ssl_key_path) > 0)
   {
-    printf("[SSL] 加载私钥文件：%s\n", g_gateway_config.ssl_key_path);
+    log_debug(NULL, "ssl_key_load", "加载私钥文件：%s", g_gateway_config.ssl_key_path);
     if (SSL_CTX_use_PrivateKey_file(g_ssl_ctx, g_gateway_config.ssl_key_path, SSL_FILETYPE_PEM) <= 0)
     {
-      fprintf(stderr, "[SSL] 加载私钥失败：%s\n", g_gateway_config.ssl_key_path);
+      log_error(NULL, "ssl_key_load_failed", "加载私钥失败：%s", g_gateway_config.ssl_key_path);
       ERR_print_errors_fp(stderr);
       SSL_CTX_free(g_ssl_ctx);
       g_ssl_ctx = NULL;
@@ -567,7 +572,7 @@ int init_ssl_context()
   }
   else
   {
-    fprintf(stderr, "[SSL] 错误：未配置 SSL 私钥路径\n");
+    log_error(NULL, "ssl_key_path_missing", "错误：未配置 SSL 私钥路径");
     SSL_CTX_free(g_ssl_ctx);
     g_ssl_ctx = NULL;
     return -1;
@@ -576,14 +581,14 @@ int init_ssl_context()
   // 验证私钥与证书是否匹配
   if (!SSL_CTX_check_private_key(g_ssl_ctx))
   {
-    fprintf(stderr, "[SSL] 错误：私钥与证书不匹配\n");
+    log_error(NULL, "ssl_key_cert_mismatch", "错误：私钥与证书不匹配");
     ERR_print_errors_fp(stderr);
     SSL_CTX_free(g_ssl_ctx);
     g_ssl_ctx = NULL;
     return -1;
   }
 
-  printf("[SSL] ✓ SSL/TLS 初始化成功完成\n");
+  log_info(NULL, "ssl_init_ok", "SSL/TLS 初始化成功完成");
   return 0;
 }
 
@@ -596,7 +601,7 @@ void cleanup_ssl_context()
     g_ssl_ctx = NULL;
     EVP_cleanup();
     ERR_free_strings();
-    printf("[SSL] SSL 上下文已清理\n");
+    log_debug(NULL, "ssl_ctx_cleanup", "SSL 上下文已清理");
   }
 }
 #else
@@ -605,7 +610,7 @@ int init_ssl_context()
 {
   if (g_gateway_config.enable_https)
   {
-    fprintf(stderr, "[SSL] 警告：启用了 HTTPS 但未编译 OpenSSL 支持，将使用普通 HTTP\n");
+    log_warn(NULL, "ssl_disabled", "启用了 HTTPS 但未编译 OpenSSL 支持，将使用普通 HTTP");
     g_gateway_config.enable_https = 0;
   }
   return 0;
@@ -698,7 +703,7 @@ int do_ssl_handshake(client_ctx_t *ctx)
   {
     // 握手成功
     ctx->ssl_handshake_state = 2;
-    printf("[SSL] ✓ TLS 握手成功：%s\n", SSL_get_cipher(ctx->ssl));
+    log_debug(NULL, "ssl_handshake_ok", "TLS 握手成功：%s", SSL_get_cipher(ctx->ssl));
 
     // 发送任何待处理的加密数据
     ssl_flush_out(ctx);
@@ -716,7 +721,7 @@ int do_ssl_handshake(client_ctx_t *ctx)
   }
 
   // 错误
-  fprintf(stderr, "[SSL] 握手失败，错误码：%d\n", err);
+  log_error(NULL, "ssl_handshake_failed", "握手失败，错误码：%d", err);
   ERR_print_errors_fp(stderr);
   return -1;
 }
@@ -775,7 +780,7 @@ int ssl_read_and_process(client_ctx_t *ctx, const char *data, size_t len)
   int err = SSL_get_error(ctx->ssl, decrypted_len);
   if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_ZERO_RETURN)
   {
-    fprintf(stderr, "[SSL] 读取失败：%d\n", err);
+    log_error(NULL, "ssl_read_failed", "读取失败：%d", err);
     uv_close((uv_handle_t *)stream, on_client_close);
     return -1;
   }
@@ -795,7 +800,7 @@ void on_ssl_write_completed(uv_write_t *req, int status)
 {
     ssl_write_ctx_t *w = (ssl_write_ctx_t *)req;
     if (status < 0)
-        fprintf(stderr, "[SSL] 写入完成错误：%s\n", uv_strerror(status));
+        log_error(NULL, "ssl_write_failed", "写入完成错误：%s", uv_strerror(status));
     free(w->data);
     free(w);
 }
@@ -827,7 +832,7 @@ int ssl_write_encrypted_response(client_ctx_t *ctx, const char *data, size_t len
     if (encrypted_len <= 0)
     {
         int err = SSL_get_error(ctx->ssl, encrypted_len);
-        fprintf(stderr, "[SSL] 加密写入失败：%d\n", err);
+        log_error(NULL, "ssl_encrypt_write_failed", "加密写入失败：%d", err);
         return -1;
     }
 
