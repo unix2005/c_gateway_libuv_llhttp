@@ -1,0 +1,34 @@
+# ===== TLS 私钥 / 密钥（绝不可入库） =====
+*.key
+*.pem
+certs/
+
+# ===== 构建产物 / 二进制 =====
+bin/
+*.o
+*.a
+*.so
+*.lo
+*.la
+
+# SDK 构建产物（源码保留，按需调整）
+sdk/src/*.o
+sdk/src/q_log.o
+sdk/dist/lib/*.a
+sdk/dist/lib/*.so
+sdk/examples/order_service
+sdk/examples/logs/
+sdk/logs/
+sdk/include/q/
+sdk/src/qcore/
+
+# ===== 日志 =====
+logs/
+*.log
+
+# ===== 编辑器 / 系统文件 =====
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
