@@ -396,12 +396,32 @@ static void metrics_new_connection(uv_stream_t *server, int status)
     uv_read_start((uv_stream_t *)&mc->client, metrics_alloc_buffer, metrics_read_cb);
 }
 
+static pthread_t g_metrics_thread;
+static int       g_metrics_started = 0;
+static uv_async_t g_metrics_async;
+static int       g_metrics_async_ready = 0;
+
+/* async 回调：在 metrics loop 线程内执行，真正停止事件循环 */
+static void on_metrics_async_stop(uv_async_t *a)
+{
+  uv_stop(a->loop);
+}
+
+static void metrics_close_walk(uv_handle_t *h, void *arg)
+{
+    (void)arg;
+    if (h) uv_close(h, NULL);
+}
+
 static void *metrics_server_thread(void *arg)
 {
     (void)arg;
 
     metrics_loop = uv_loop_new();
     uv_tcp_init(metrics_loop, &metrics_server);
+    /* async 句柄：让 metrics_server_stop 能跨线程唤醒本 loop（uv_stop 无法唤醒阻塞的 epoll） */
+    uv_async_init(metrics_loop, &g_metrics_async, on_metrics_async_stop);
+    g_metrics_async_ready = 1;
 
     struct sockaddr_in addr;
     uv_ip4_addr("0.0.0.0", g_gateway_config.observability.metrics_port, &addr);
@@ -417,6 +437,7 @@ static void *metrics_server_thread(void *arg)
                 "[Metrics] 绑定端口 %d 失败：%s（指标服务不可用，网关继续运行）\n",
                 g_gateway_config.observability.metrics_port, uv_strerror(r));
         uv_close((uv_handle_t *)&metrics_server, NULL);
+        uv_close((uv_handle_t *)&g_metrics_async, NULL);
         while (uv_loop_alive(metrics_loop))
             uv_run(metrics_loop, UV_RUN_ONCE);
         uv_loop_delete(metrics_loop);
@@ -429,6 +450,7 @@ static void *metrics_server_thread(void *arg)
         fprintf(stderr, "[Metrics] 监听失败：%s（指标服务不可用，网关继续运行）\n",
                 uv_strerror(r));
         uv_close((uv_handle_t *)&metrics_server, NULL);
+        uv_close((uv_handle_t *)&g_metrics_async, NULL);
         while (uv_loop_alive(metrics_loop))
             uv_run(metrics_loop, UV_RUN_ONCE);
         uv_loop_delete(metrics_loop);
@@ -441,10 +463,9 @@ static void *metrics_server_thread(void *arg)
 
     uv_run(metrics_loop, UV_RUN_DEFAULT);
 
-    uv_close((uv_handle_t *)&metrics_server, NULL);
-    while (uv_loop_alive(metrics_loop))
-        uv_run(metrics_loop, UV_RUN_ONCE);
-    uv_loop_delete(metrics_loop);
+    uv_walk(metrics_loop, metrics_close_walk, NULL);
+    uv_run(metrics_loop, UV_RUN_NOWAIT);
+    uv_loop_close(metrics_loop);
     return NULL;
 }
 
@@ -456,7 +477,21 @@ void metrics_server_start(void)
         return;
     }
 
-    pthread_t thread;
-    pthread_create(&thread, NULL, metrics_server_thread, NULL);
-    pthread_detach(thread);
+    pthread_create(&g_metrics_thread, NULL, metrics_server_thread, NULL);
+    g_metrics_started = 1;
+}
+
+void metrics_server_stop(void)
+{
+    if (g_metrics_async_ready)
+        uv_async_send(&g_metrics_async);
+}
+
+void metrics_server_join(void)
+{
+    if (g_metrics_started)
+    {
+        pthread_join(g_metrics_thread, NULL);
+        g_metrics_started = 0;
+    }
 }

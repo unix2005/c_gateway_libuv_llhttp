@@ -34,8 +34,9 @@ void route_request(client_ctx_t *client)
     return;
   }
 
-  // 2.2 服务注销接口
-  if (strcmp(client->url, "/api/services/unregister") == 0 && client->parser.method == HTTP_DELETE)
+  // 2.2 服务注销接口（同时兼容 DELETE 与 POST，便于不同调用方接入）
+  if (strcmp(client->url, "/api/services/unregister") == 0 &&
+      (client->parser.method == HTTP_DELETE || client->parser.method == HTTP_POST))
   {
     handle_service_unregister(client);
     return;
@@ -113,7 +114,7 @@ void send_response(client_ctx_t *client, int status_code, const char *content_ty
     }
 
     // 使用 SSL 加密并发送
-    ssl_write_encrypted_response(client, response_data, total_len);
+    ssl_write_encrypted_response(client, response_data, total_len, status_code);
 
     // 清理 body（如果有）
     if (body_to_send)

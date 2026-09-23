@@ -2,6 +2,14 @@
 
 static uv_timer_t health_timer;
 static uv_loop_t *health_loop;
+static uv_async_t g_health_async;
+static int        g_health_async_ready = 0;
+
+/* async 回调：在 health loop 线程内执行，真正停止事件循环 */
+static void on_health_async_stop(uv_async_t *a)
+{
+  uv_stop(a->loop);
+}
 #define MAX_FAILURE_COUNT 3 // 最大失败次数，超过后移除服务
 
 size_t health_write_callback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -174,6 +182,9 @@ void start_health_checker()
 {
   health_loop = uv_loop_new();
   uv_timer_init(health_loop, &health_timer);
+  /* async 句柄：让 on_signal_stop 能跨线程唤醒本 loop（uv_stop 无法唤醒阻塞的 epoll） */
+  uv_async_init(health_loop, &g_health_async, on_health_async_stop);
+  g_health_async_ready = 1;
 
   printf("[Health] 启动健康检查器，间隔 %d ms\n", g_gateway_config.health_check_interval);
 
@@ -181,4 +192,10 @@ void start_health_checker()
                  g_gateway_config.health_check_interval, g_gateway_config.health_check_interval);
 
   uv_run(health_loop, UV_RUN_DEFAULT);
+}
+
+void health_checker_stop(void)
+{
+  if (g_health_async_ready)
+    uv_async_send(&g_health_async);
 }

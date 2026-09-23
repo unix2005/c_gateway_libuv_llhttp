@@ -102,6 +102,9 @@
 #endif
 
 #define POOL_SIZE 8192
+
+/** 请求体默认大小上限（1MB），防止无界 realloc 造成内存耗尽 DoS */
+#define DEFAULT_MAX_BODY_SIZE (1024 * 1024)
 #define MAX_SERVICES 64
 #define MAX_SERVICE_INSTANCES 16
 #define SERVICE_NAME_LEN 64
@@ -260,6 +263,12 @@ typedef struct
 
     mem_pool_t pool; ///< 内存池 (8KB)
 
+    /* 内存池溢出（单次请求池分配超过 POOL_SIZE）时降级为 malloc 的块登记，
+       连接关闭时统一释放。原实现直接返回 malloc 指针且从不释放 → 内存泄漏 */
+    void  **pool_overflow;     ///< 溢出块指针数组
+    size_t  pool_overflow_n;   ///< 已登记溢出块数量
+    size_t  pool_overflow_cap; ///< 数组容量
+
     char *body_buffer; ///< 请求体缓冲区
     size_t body_len;   ///< 请求体长度
 
@@ -352,6 +361,7 @@ typedef struct {
     int health_check_interval;    ///< 健康检查间隔 (毫秒)
     char ssl_cert_path[512];      ///< SSL 证书路径
     char ssl_key_path[512];       ///< SSL 私钥路径
+    size_t max_body_size;         ///< 请求体大小上限（字节），0 表示用默认值，防 DoS
     
     // === 可观测性配置 ===
     observability_config_t observability;  ///< 可观测性配置
@@ -432,7 +442,7 @@ int ssl_read_and_process(client_ctx_t *ctx, const char *data, size_t len);
  * @param len 数据长度
  * @return int 0 表示成功，-1 表示失败
  */
-int ssl_write_encrypted_response(client_ctx_t *ctx, const char *data, size_t len);
+int ssl_write_encrypted_response(client_ctx_t *ctx, const char *data, size_t len, int status_code);
 
 /**
  * @brief SSL 写入完成回调
@@ -554,6 +564,15 @@ char *get_query_param(client_ctx_t *ctx, const char *key);
 void *pool_alloc(client_ctx_t *ctx, size_t size);
 
 /**
+ * @brief 释放内存池降级 malloc 登记的所有块
+ *
+ * 连接关闭时调用，避免 pool_alloc 溢出路径的堆内存泄漏。
+ *
+ * @param ctx 客户端上下文
+ */
+void pool_overflow_free(client_ctx_t *ctx);
+
+/**
  * @brief 解析 IP 地址
  *
  * 将主机名或 IP 地址字符串解析为 ip_address_t 结构。
@@ -640,6 +659,12 @@ void metrics_init(void);
  * 在独立线程中启动 Prometheus 指标抓取服务器。
  */
 void metrics_server_start(void);
+
+/**
+ * 停止并等待指标服务器线程退出（供 SIGINT/SIGTERM 优雅退出调用）。
+ */
+void metrics_server_stop(void);
+void metrics_server_join(void);
 
 /**
  * @brief 记录请求开始
@@ -811,6 +836,11 @@ service_instance_t *service_select_instance(service_t *service);
  * 在独立线程中启动定时健康检查任务。
  */
 void start_health_checker(void);
+
+/**
+ * 停止健康检查事件循环（供 SIGINT/SIGTERM 优雅退出调用）。
+ */
+void health_checker_stop(void);
 
 /**
  * @brief 转发请求到后端服务

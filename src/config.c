@@ -190,7 +190,12 @@ int load_gateway_config(const char *config_file)
     g_gateway_config.health_check_interval = DEFAULT_HEALTH_CHECK_INTERVAL;
     g_gateway_config.ssl_cert_path[0] = '\0';
     g_gateway_config.ssl_key_path[0] = '\0';
+    g_gateway_config.max_body_size = DEFAULT_MAX_BODY_SIZE;
   }
+
+  /* 兼容未在配置文件中出现的字段 */
+  if (g_gateway_config.max_body_size == 0)
+    g_gateway_config.max_body_size = DEFAULT_MAX_BODY_SIZE;
 
   cJSON_Delete(root);
   return 0;

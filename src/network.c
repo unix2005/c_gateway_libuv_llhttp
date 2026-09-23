@@ -1,6 +1,9 @@
 #include "gateway.h"
 #include "async_http.h"
 
+/* 前向声明：HTTP 解析失败时回 400 并关闭连接 */
+static void abort_bad_request(client_ctx_t *ctx, uv_stream_t *stream);
+
 // === SSL/TLS 全局变量 ===
 #ifdef HAVE_OPENSSL
 SSL_CTX *g_ssl_ctx = NULL;
@@ -14,31 +17,33 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested, uv_buf_t *buf)
   buf->len = suggested;
 }
 
-// 连接关闭回调
-void on_close(uv_handle_t *handle)
-{
-  client_ctx_t *ctx = (client_ctx_t *)handle->data;
-
-  /* 客户端断开：取消其所有在途上游请求，避免向已释放上下文写响应 */
-  async_http_cancel_by_userdata(handle->loop, ctx);
-
 #ifdef HAVE_OPENSSL
-  // 清理 SSL 资源
+/*
+ * 统一清理 SSL 相关资源。
+ * 关键点：SSL 拥有通过 SSL_set_bio 绑定的 BIO，SSL_free() 会释放它；
+ * 若之后再 BIO_free() 就是双重释放（表现为 on_close 里 SIGSEGV）。
+ * 因此先 SSL_set_bio(NULL, NULL) 交还所有权，再手动释放 BIO。
+ */
+static void ssl_cleanup(client_ctx_t *ctx)
+{
   if (ctx->ssl)
   {
+    /* SSL_free() 会释放通过 SSL_set_bio 绑定的 BIO（rbio==wbio 时只释放一次），
+       因此绝不能再 BIO_free()，否则双重释放 → SIGSEGV。
+       注意：也不要用 SSL_set_bio(ssl, NULL, NULL) “解绑”，
+       该函数会立即 BIO_free_all 掉旧 BIO，同样导致双重释放。 */
     SSL_shutdown(ctx->ssl);
     SSL_free(ctx->ssl);
     ctx->ssl = NULL;
+    ctx->ssl_bio = NULL; // 所有权已随 SSL 释放
   }
-
-  // 清理 BIO
-  if (ctx->ssl_bio)
+  else if (ctx->ssl_bio)
   {
+    /* SSL 从未创建/已释放时，BIO 才由我们负责释放 */
     BIO_free(ctx->ssl_bio);
     ctx->ssl_bio = NULL;
   }
 
-  // 清理 SSL 缓冲区
   if (ctx->ssl_read_buffer)
   {
     free(ctx->ssl_read_buffer);
@@ -53,7 +58,23 @@ void on_close(uv_handle_t *handle)
     ctx->ssl_write_buffer = NULL;
     ctx->ssl_write_len = 0;
   }
+}
 #endif
+
+// 连接关闭回调
+void on_close(uv_handle_t *handle)
+{
+  client_ctx_t *ctx = (client_ctx_t *)handle->data;
+
+  /* 客户端断开：取消其所有在途上游请求，避免向已释放上下文写响应 */
+  async_http_cancel_by_userdata(handle->loop, ctx);
+
+#ifdef HAVE_OPENSSL
+  ssl_cleanup(ctx);
+#endif
+
+  /* 释放内存池降级 malloc 登记的块（防泄漏） */
+  pool_overflow_free(ctx);
 
   if (ctx->body_buffer)
     free(ctx->body_buffer);
@@ -80,6 +101,14 @@ static void on_client_close(uv_handle_t *handle)
     free(ctx->body_buffer);
   }
 
+#ifdef HAVE_OPENSSL
+  /* 优雅关闭路径原先完全不清理 SSL，导致每个 HTTPS 连接泄漏 SSL/BIO */
+  ssl_cleanup(ctx);
+#endif
+
+  // 释放内存池降级 malloc 登记的块（防泄漏）
+  pool_overflow_free(ctx);
+
   // 释放客户端上下文
   free(ctx);
 }
@@ -88,7 +117,22 @@ static void on_client_close(uv_handle_t *handle)
 int on_body(llhttp_t *parser, const char *at, size_t length)
 {
   client_ctx_t *ctx = (client_ctx_t *)parser->data;
-  ctx->body_buffer = realloc(ctx->body_buffer, ctx->body_len + length + 1);
+
+  /* 请求体大小上限：原实现 realloc 无上限（DoS 面）且未判空（NULL 会段错误）。
+     超限返回 -1 让 llhttp 报错，上层据此回 413/400。 */
+  size_t limit = g_gateway_config.max_body_size ? g_gateway_config.max_body_size
+                                                : DEFAULT_MAX_BODY_SIZE;
+  if (ctx->body_len + length > limit)
+  {
+    return -1;
+  }
+
+  char *p = realloc(ctx->body_buffer, ctx->body_len + length + 1);
+  if (!p)
+  {
+    return -1;
+  }
+  ctx->body_buffer = p;
   memcpy(ctx->body_buffer + ctx->body_len, at, length);
   ctx->body_len += length;
   ctx->body_buffer[ctx->body_len] = '\0';
@@ -153,20 +197,26 @@ void on_read(uv_stream_t *client_stream, ssize_t nread, const uv_buf_t *buf)
 
   if (nread > 0)
   {
+    int parse_ok = 1;
 #ifdef HAVE_OPENSSL
-    if (ctx->ssl && ctx->ssl_handshake_state >= 1)
+    /* HTTPS：只要 ssl 存在就必须走 SSL 层。
+       原实现要求 ssl_handshake_state >= 1，导致首个 TLS ClientHello
+       （state==0）被当成明文喂给 llhttp —— 握手不可能完成。 */
+    if (ctx->ssl)
     {
-      // HTTPS: 先处理 SSL 握手或解密
       ssl_read_and_process(ctx, buf->base, nread);
     }
     else
-    {
-      // HTTP: 直接处理明文
-      llhttp_execute(&ctx->parser, buf->base, nread);
-    }
-#else
-    llhttp_execute(&ctx->parser, buf->base, nread);
 #endif
+    {
+      parse_ok = (llhttp_execute(&ctx->parser, buf->base, nread) == HPE_OK);
+    }
+
+    if (!parse_ok)
+    {
+      /* 原实现忽略 llhttp_execute 返回值，解析失败静默吞掉且不回 400 */
+      abort_bad_request(ctx, client_stream);
+    }
   }
   else if (nread < 0)
   {
@@ -577,6 +627,64 @@ void cleanup_ssl_context()
 // 前向声明：握手阶段待发数据的写完成回调
 static void on_ssl_handshake_write_done(uv_write_t *req, int status);
 
+/*
+ * 将 bio_write 累积的待发密文（ssl_write_buffer）交给 uv_write 发送。
+ * 握手与加解密过程中都可能产生待发密文，必须在每次 SSL 调用后冲刷，
+ * 否则对端收不到 ServerHello/Certificate，握手永远无法完成。
+ */
+static void ssl_flush_out(client_ctx_t *ctx)
+{
+  if (!ctx->ssl_write_buffer || ctx->ssl_write_len == 0)
+    return;
+
+  char  *data = ctx->ssl_write_buffer;
+  size_t len  = ctx->ssl_write_len;
+  ctx->ssl_write_buffer = NULL;
+  ctx->ssl_write_len = 0;
+
+  uv_buf_t   buffer = uv_buf_init(data, len);
+  uv_write_t *req   = malloc(sizeof(uv_write_t));
+  if (!req)
+  {
+    free(data);
+    return;
+  }
+  req->data = data;
+  uv_write(req, (uv_stream_t *)&ctx->handle, &buffer, 1, on_ssl_handshake_write_done);
+}
+
+/*
+ * 入站密文缓存：SSL_read 经自定义 BIO 的 bio_read 消费本缓冲。
+ * 修复要点：原实现用 BIO_write() 写入站数据，而 bio_write 写的是
+ * ssl_write_buffer（出站），ssl_read_buffer 全仓库从未被写入，
+ * 导致 SSL_read 永远拿不到数据 —— 握手在数学上不可能完成。
+ */
+static int ssl_read_buffer_append(client_ctx_t *ctx, const char *data, size_t len)
+{
+  if (ctx->ssl_read_len + len > ctx->ssl_read_capacity)
+  {
+    size_t need = ctx->ssl_read_len + len;
+    size_t cap  = ctx->ssl_read_capacity ? ctx->ssl_read_capacity : 4096;
+    while (cap < need)
+      cap *= 2;
+    char *p = realloc(ctx->ssl_read_buffer, cap);
+    if (!p)
+      return -1;
+    ctx->ssl_read_buffer   = p;
+    ctx->ssl_read_capacity = cap;
+  }
+  memcpy(ctx->ssl_read_buffer + ctx->ssl_read_len, data, len);
+  ctx->ssl_read_len += len;
+  return 0;
+}
+
+// 解析失败回 400 并关闭连接
+static void abort_bad_request(client_ctx_t *ctx, uv_stream_t *stream)
+{
+  send_response(ctx, 400, "text/plain", strdup("Bad Request\n"));
+  uv_close((uv_handle_t *)stream, on_client_close);
+}
+
 int do_ssl_handshake(client_ctx_t *ctx)
 {
   if (!ctx->ssl || ctx->ssl_handshake_state != 1)
@@ -593,15 +701,7 @@ int do_ssl_handshake(client_ctx_t *ctx)
     printf("[SSL] ✓ TLS 握手成功：%s\n", SSL_get_cipher(ctx->ssl));
 
     // 发送任何待处理的加密数据
-    if (ctx->ssl_write_buffer && ctx->ssl_write_len > 0)
-    {
-      uv_buf_t buffer = uv_buf_init(ctx->ssl_write_buffer, ctx->ssl_write_len);
-      uv_write_t *req = malloc(sizeof(uv_write_t));
-      uv_write(req, (uv_stream_t *)&ctx->handle, &buffer, 1,
-               on_ssl_handshake_write_done);
-      ctx->ssl_write_buffer = NULL;
-      ctx->ssl_write_len = 0;
-    }
+    ssl_flush_out(ctx);
 
     return 0;
   }
@@ -609,7 +709,9 @@ int do_ssl_handshake(client_ctx_t *ctx)
   int err = SSL_get_error(ctx->ssl, ret);
   if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE)
   {
-    // 需要更多数据，继续读取
+    /* 关键：握手中间产物（ServerHello / Certificate 等）必须立刻发出，
+       否则对端收不到，握手会永远卡在 WANT_READ */
+    ssl_flush_out(ctx);
     return 1; // 继续
   }
 
@@ -622,24 +724,39 @@ int do_ssl_handshake(client_ctx_t *ctx)
 // SSL 加密读取（解密数据并传递给 llhttp）
 int ssl_read_and_process(client_ctx_t *ctx, const char *data, size_t len)
 {
-  if (!ctx->ssl || ctx->ssl_handshake_state != 2)
+  client_ctx_t *owner = ctx;
+  uv_stream_t *stream = (uv_stream_t *)&ctx->handle;
+
+  if (!ctx->ssl)
   {
-    // 未启用 HTTPS 或握手未完成，直接处理明文
-    llhttp_execute(&ctx->parser, data, len);
+    /* 明文 HTTP：直接解析，失败回 400（原实现忽略返回值） */
+    if (llhttp_execute(&ctx->parser, data, len) != HPE_OK)
+    {
+      abort_bad_request(owner, stream);
+      return -1;
+    }
     return 0;
   }
 
-  // 将加密数据写入 BIO
-  BIO_write(ctx->ssl_bio, data, len);
-
-  // 如果正在握手，先完成握手
-  if (ctx->ssl_handshake_state == 1)
+  /* 入站密文 -> ssl_read_buffer（供 bio_read 消费）
+     修复：原实现 BIO_write() 写到了出站 ssl_write_buffer，SSL_read 永远读不到数据 */
+  if (ssl_read_buffer_append(ctx, data, len) != 0)
   {
-    do_ssl_handshake(ctx);
-    if (ctx->ssl_handshake_state != 2)
+    uv_close((uv_handle_t *)stream, on_client_close);
+    return -1;
+  }
+
+  /* 握手未完成：只做握手，绝不把 TLS 记录喂给 llhttp */
+  if (ctx->ssl_handshake_state < 2)
+  {
+    int r = do_ssl_handshake(ctx);
+    if (r < 0)
     {
-      return 0; // 握手未完成，等待更多数据
+      uv_close((uv_handle_t *)stream, on_client_close);
+      return -1;
     }
+    if (ctx->ssl_handshake_state != 2)
+      return 0; // 等待更多数据
   }
 
   // 从 SSL 读取解密后的数据
@@ -648,17 +765,22 @@ int ssl_read_and_process(client_ctx_t *ctx, const char *data, size_t len)
 
   while ((decrypted_len = SSL_read(ctx->ssl, decrypted, sizeof(decrypted))) > 0)
   {
-    // 将解密后的数据传递给 llhttp
-    llhttp_execute(&ctx->parser, decrypted, decrypted_len);
+    if (llhttp_execute(&ctx->parser, decrypted, decrypted_len) != HPE_OK)
+    {
+      abort_bad_request(owner, stream);
+      return -1;
+    }
   }
 
   int err = SSL_get_error(ctx->ssl, decrypted_len);
   if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_ZERO_RETURN)
   {
     fprintf(stderr, "[SSL] 读取失败：%d\n", err);
+    uv_close((uv_handle_t *)stream, on_client_close);
     return -1;
   }
 
+  ssl_flush_out(ctx); // 冲刷可能的告警/会话票据等出站密文
   return 0;
 }
 
@@ -678,15 +800,24 @@ void on_ssl_write_completed(uv_write_t *req, int status)
     free(w);
 }
 
-// 握手阶段待发数据的写完成回调（仅释放 req）
+// 握手/应用数据阶段待发密文的写完成回调：释放堆缓冲与请求结构体
 static void on_ssl_handshake_write_done(uv_write_t *req, int status)
 {
     (void)status;
+    free(req->data);   // 由 ssl_flush_out 交出的堆缓冲区
     free(req);
 }
 
+/*
+ * 说明：HTTPS 响应完成后暂不执行明文路径 on_write_completed 的收尾逻辑
+ * （指标/日志/keep-alive 复位）。实测在该回调里做这些操作会引入
+ * 多次请求后的 SIGSEGV 竞态（gdb 附加时因时序变化不复现），
+ * 为避免引入回归，保留简单稳定的“直接发送密文”实现。
+ * TODO: 单独排查该竞态后再启用 HTTPS 的指标与复位逻辑。
+ */
+
 // SSL 加密写入（修复：数据拷贝到堆，避免栈内存被异步 uv_write 引用）
-int ssl_write_encrypted_response(client_ctx_t *ctx, const char *data, size_t len)
+int ssl_write_encrypted_response(client_ctx_t *ctx, const char *data, size_t len, int status_code)
 {
 #ifdef HAVE_OPENSSL
     if (!ctx->ssl || ctx->ssl_handshake_state != 2)
@@ -700,24 +831,11 @@ int ssl_write_encrypted_response(client_ctx_t *ctx, const char *data, size_t len
         return -1;
     }
 
-    unsigned char buf[16384];
-    int bio_len;
-    while ((bio_len = BIO_read(ctx->ssl_bio, buf, sizeof(buf))) > 0)
-    {
-        ssl_write_ctx_t *w = (ssl_write_ctx_t *)malloc(sizeof(*w));
-        w->data = (char *)malloc((size_t)bio_len);
-        memcpy(w->data, buf, (size_t)bio_len);
-        uv_buf_t buffer = uv_buf_init(w->data, (size_t)bio_len);
-        int r = uv_write(&w->req, (uv_stream_t *)&ctx->handle, &buffer, 1,
-                         on_ssl_write_completed);
-        if (r < 0)
-        {
-            fprintf(stderr, "[SSL] uv_write 失败：%s\n", uv_strerror(r));
-            free(w->data);
-            free(w);
-            return -1;
-        }
-    }
+    /* SSL_write 产生的出站密文由 bio_write 写入 ssl_write_buffer，
+       必须直接发送该缓冲。原实现用 BIO_read() 读取，而 bio_read 走的是
+       入站 ssl_read_buffer —— 方向完全相反，响应永远发不出去。 */
+    (void)status_code; /* TODO: 竞态修复后再用于 HTTPS 指标 */
+    ssl_flush_out(ctx);
     return 0;
 #else
     return -1;
@@ -736,8 +854,8 @@ int ssl_write_data(client_ctx_t *ctx, const char *data, size_t len)
     return uv_write(req, (uv_stream_t *)&ctx->handle, &buffer, 1, NULL);
   }
 
-  // 调用新的加密写入函数
-  return ssl_write_encrypted_response(ctx, data, len);
+  // 调用新的加密写入函数（状态码未知，按 200 计）
+  return ssl_write_encrypted_response(ctx, data, len, 200);
 }
 
 #endif
