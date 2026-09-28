@@ -26,6 +26,7 @@
 #define CSERVICE_H
 
 #include <stddef.h>
+#include <uv.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,7 +48,10 @@ typedef struct cservice      cservice_t;
 typedef struct cservice_req  cservice_req_t;
 typedef struct cservice_res  cservice_res_t;
 
-/* 请求处理器：在服务器事件循环线程内调用，禁止长时间阻塞 */
+/* 请求处理器：在服务器事件循环线程内调用。
+ *  - 禁止在 handler 内做阻塞操作（如同步 DB 查询、sleep）。
+ *  - 若需异步（转发后端、查 DB 等），调用 cservice_res_defer() 标记延迟响应，
+ *    在异步回调（必须运行于事件循环线程）中回写响应并调用 cservice_res_finish()。 */
 typedef void (*cservice_handler_t)(cservice_req_t *req, cservice_res_t *res);
 
 /* ============================ 生命周期 ============================ */
@@ -139,6 +143,10 @@ const char *cservice_req_body(cservice_req_t *req, size_t *len);
  *  用于在 handler 中观测“真·多线程”连接分发（每个 worker loop 独立接连接）。 */
 int cservice_req_loop_id(const cservice_req_t *req);
 
+/** 返回处理本请求的事件循环（uv_loop_t*）。
+ *  异步操作（异步出站客户端、uv_queue_work 等）必须绑定到这个 loop。 */
+uv_loop_t *cservice_req_loop(cservice_req_t *req);
+
 /* ============================ 响应 API ============================ */
 
 /** 设置 HTTP 状态码（默认 200） */
@@ -160,6 +168,16 @@ void cservice_res_send(cservice_res_t *res, int code,
 /** printf 风格构造文本响应 */
 void cservice_res_printf(cservice_res_t *res, int code,
                          const char *content_type, const char *fmt, ...);
+
+/* ============================ 异步 / 延迟响应 ============================ */
+
+/** 标记本响应为“延迟响应”：handler 返回后框架不会自动发送，也不会回收连接，
+ *  需由后续异步回调（必须运行于事件循环线程）调用 cservice_res_finish() 真正发送。 */
+void cservice_res_defer(cservice_res_t *res);
+
+/** 完成延迟响应（须在事件循环线程调用）：发送此前已设置好的响应。
+ *  若客户端在响应在途期间已断开，则直接安全回收连接，不会崩溃。 */
+void cservice_res_finish(cservice_res_t *res);
 
 #ifdef __cplusplus
 }

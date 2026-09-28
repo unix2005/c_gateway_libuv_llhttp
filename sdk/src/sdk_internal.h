@@ -19,6 +19,8 @@
 #define SDK_MAX_HEADERS 32
 #define SDK_URL_LEN     2048
 #define SDK_METHOD_STR  16
+#define SDK_REG_LEN     512
+#define SDK_LOG_DIR_LEN 512
 
 /* ---------- 请求 / 响应（对外不透明，内部定义） ---------- */
 
@@ -26,6 +28,8 @@ typedef struct {
     char name[128];
     char value[512];
 } sdk_kv_t;
+
+struct sdk_conn;   /* 前向声明，供 cservice_res_t 回指连接 */
 
 struct cservice_req {
     char            method_str[SDK_METHOD_STR];
@@ -45,6 +49,8 @@ struct cservice_res {
     char     content_type[64];
     sdk_kv_t headers[SDK_MAX_HEADERS];
     int      header_count;
+    int      deferred;      /* 1=延迟响应：handler 返回后不自动发送，由 cservice_res_finish 发送 */
+    struct sdk_conn *conn;  /* 回指所属连接，供 finish 找回 */
 };
 
 /* ---------- 路由 ---------- */
@@ -76,6 +82,10 @@ typedef struct sdk_conn {
     char               cur_field[128];
     char               cur_value[512];
     int                hdr_active;   /* 当前是否处于某条 header 解析中 */
+
+    /* 延迟响应状态 */
+    int                resp_pending; /* 1=已 defer 但 cservice_res_finish 尚未调用 */
+    int                client_gone;  /* 响应在途期间客户端已断开 */
 } sdk_conn_t;
 
 /* ---------- 服务实例 ---------- */
@@ -93,7 +103,7 @@ struct cservice {
     char  config_file[256];
 
     /* 日志配置（传给 q_log_init） */
-    char  log_dir[256];
+    char  log_dir[SDK_LOG_DIR_LEN];
     int   log_level;           /* 取值见 q_log_level_t */
 
     sdk_route_t *routes;
@@ -109,8 +119,8 @@ struct cservice {
     pthread_t   hb_thread;
     int         hb_running;
 
-    char  reg_url[256];
-    char  unreg_url[256];
+    char  reg_url[SDK_REG_LEN];
+    char  unreg_url[SDK_REG_LEN];
 };
 
 /* ---------- 内部函数声明 ---------- */

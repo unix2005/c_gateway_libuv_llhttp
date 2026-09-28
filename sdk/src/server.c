@@ -143,6 +143,15 @@ static int on_message_complete(llhttp_t *parser)
     }
 
     /* 发送响应 */
+    if (c->res.deferred)
+    {
+        /* 延迟响应：不在此发送，也不释放请求体（异步逻辑可能仍需读取）。
+           暂停读取，避免 keep-alive 下客户端在响应返回前又发来新请求造成错乱。
+           真正发送由 loop 线程内的 cservice_res_finish 触发。 */
+        c->resp_pending = 1;
+        uv_read_stop((uv_stream_t *)&c->handle);
+        return 0;
+    }
     sdk_send_response(c);
 
     /* body 已被发送逻辑接管/释放，避免 reset 重复释放 */
@@ -180,6 +189,14 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
     {
         if (nread != UV_EOF)
             sdk_log("WARN", "read error: %s", uv_err_name(nread));
+        if (c->resp_pending)
+        {
+            /* 响应在途时客户端断开：标记后跳过释放，待 cservice_res_finish
+               路径回收连接（否则异步回调会访问已释放内存）。 */
+            c->client_gone = 1;
+            uv_read_stop((uv_stream_t *)&c->handle);
+            return;
+        }
         uv_close((uv_handle_t *)stream, on_conn_close);
     }
     if (buf->base) free(buf->base);
@@ -209,6 +226,31 @@ static void on_write_completed(uv_write_t *req, int status)
             uv_close((uv_handle_t *)&c->handle, on_conn_close);
     }
     free(w);
+}
+
+void cservice_res_defer(cservice_res_t *res)
+{
+    if (res) res->deferred = 1;
+}
+
+/* 完成延迟响应：必须在事件循环线程内调用（如异步客户端的完成回调、
+   uv_queue_work 的 after_work）。会真正发送此前已设置好的响应；若客户端
+   在响应在途期间已断开，则直接回收连接。 */
+void cservice_res_finish(cservice_res_t *res)
+{
+    if (!res) return;
+    sdk_conn_t *c = res->conn;
+    if (!c) return;
+    c->resp_pending = 0;
+
+    if (c->client_gone)
+    {
+        if (!uv_is_closing((uv_handle_t *)&c->handle))
+            uv_close((uv_handle_t *)&c->handle, on_conn_close);
+        return;
+    }
+    /* on_write_completed 会按 keep-alive 决定复用或关闭 */
+    sdk_send_response(c);
 }
 
 void sdk_send_response(sdk_conn_t *c)
@@ -286,6 +328,7 @@ static void on_new_connection(uv_stream_t *server, int status)
     llhttp_init(&c->parser, HTTP_REQUEST, &c->settings);
     c->parser.data = c;
     c->req.conn = c;
+    c->res.conn = c;
 
     if (uv_accept(server, (uv_stream_t *)&c->handle) == 0)
         uv_read_start((uv_stream_t *)&c->handle, on_alloc, on_read);
@@ -297,6 +340,14 @@ int cservice_req_loop_id(const cservice_req_t *req)
 {
     if (!req || !req->conn) return -1;
     return ((sdk_conn_t *)req->conn)->loop_index;
+}
+
+uv_loop_t *cservice_req_loop(cservice_req_t *req)
+{
+    if (!req || !req->conn) return NULL;
+    sdk_conn_t *c = (sdk_conn_t *)req->conn;
+    if (!c->svc || c->loop_index < 0 || c->loop_index >= c->svc->nloops) return NULL;
+    return c->svc->loops[c->loop_index];
 }
 
 /* ---------- 多 loop 启动 ---------- */
