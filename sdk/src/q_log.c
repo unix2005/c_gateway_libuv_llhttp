@@ -1,6 +1,4 @@
-#include <q/log.h>
-#include <q/core/time.h>
-#include <q/core/types.h>
+#include <q_log.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -128,7 +126,7 @@ static int cat_open(q_cat_t *c)
 static void cat_rotate(q_cat_t *c)
 {
     char ts[32];
-    char dst[Q_LOG_PATH_LEN];
+    char dst[Q_LOG_PATH_LEN+32];
 
     if (c->fd >= 0) {
         close(c->fd);

@@ -135,6 +135,10 @@ const char *cservice_req_query(cservice_req_t *req, const char *name);
 /** 请求体指针；len 可为 NULL。返回 NULL 表示无 body */
 const char *cservice_req_body(cservice_req_t *req, size_t *len);
 
+/** 返回处理本请求的 loop/线程序号（0..thread_count-1）。
+ *  用于在 handler 中观测“真·多线程”连接分发（每个 worker loop 独立接连接）。 */
+int cservice_req_loop_id(const cservice_req_t *req);
+
 /* ============================ 响应 API ============================ */
 
 /** 设置 HTTP 状态码（默认 200） */

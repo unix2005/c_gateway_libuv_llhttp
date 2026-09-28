@@ -67,6 +67,7 @@ typedef struct sdk_conn {
     size_t             body_len;
     int                keep_alive;
     cservice_t        *svc;
+    int                loop_index;     /* 本连接由第几个 worker loop 处理 */
 
     cservice_req_t     req;
     cservice_res_t     res;
@@ -102,6 +103,7 @@ struct cservice {
     volatile int stop;
     uv_loop_t  **loops;
     uv_tcp_t   **servers;
+    uv_async_t **asyncs;       /* 每 loop 一个唤醒句柄，用于跨线程停止（替代 uv_stop 无法唤醒阻塞 epoll 的问题） */
     int          nloops;
     pthread_t  *threads;
     pthread_t   hb_thread;

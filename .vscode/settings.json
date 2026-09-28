@@ -4,7 +4,7 @@
   "C_Cpp_Runner.debuggerPath": "gdb",
   "C_Cpp_Runner.cStandard": "",
   "C_Cpp_Runner.cppStandard": "",
-  "C_Cpp_Runner.msvcBatchPath": "C:/Program Files/Microsoft Visual Studio/VR_NR/Community/VC/Auxiliary/Build/vcvarsall.bat",
+  "C_Cpp_Runner.msvcBatchPath": "",
   "C_Cpp_Runner.useMsvc": false,
   "C_Cpp_Runner.warnings": [
     "-Wall",
@@ -56,5 +56,24 @@
   "C_Cpp_Runner.showCompilationTime": false,
   "C_Cpp_Runner.useLinkTimeOptimization": false,
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
-  "makefile.configureOnOpen": false
+  "makefile.configureOnOpen": false,
+
+  
+    // 保存自动格式化
+    "editor.formatOnSave": true,
+    // C文件默认格式化器：微软C/C++内置clang-format
+    "[c]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools"
+    },
+    "[cpp]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools"
+    },
+    // 读取项目根目录 .clang-format
+    "C_Cpp.clang_format_style": "file",
+    // 找不到 .clang-format 时回退风格
+    "C_Cpp.clang_format_fallbackStyle": "LLVM",
+    // CodeBuddy AI生成代码遵守项目规则
+    "codebuddy.rules.enable": true
+
+
 }

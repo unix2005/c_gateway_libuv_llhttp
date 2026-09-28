@@ -202,7 +202,11 @@ static void on_write_completed(uv_write_t *req, int status)
     }
     else
     {
-        uv_close((uv_handle_t *)&c->handle, on_conn_close);
+        /* 防御双关：若连接已被 on_read EOF / 关闭期 uv_walk 先关闭，
+           挂起写以 UV_ECANCELED 回调到此，handle 已 closing，再次 uv_close
+           会触发 libuv 的 !uv__is_closing 断言。仅在未关闭时才关。 */
+        if (!uv_is_closing((uv_handle_t *)&c->handle))
+            uv_close((uv_handle_t *)&c->handle, on_conn_close);
     }
     free(w);
 }
@@ -213,20 +217,29 @@ void sdk_send_response(sdk_conn_t *c)
     const char *ct = c->res.content_type[0] ? c->res.content_type : "application/octet-stream";
     size_t blen = c->res.body ? c->res.body_len : 0;
 
-    /* 构造响应头 */
+    /* 计算自定义头总长度，避免缓冲区溢出 */
+    size_t extra = 0;
+    for (int i = 0; i < c->res.header_count; i++)
+        extra += strlen(c->res.headers[i].name) + strlen(c->res.headers[i].value) + 4; /* ": \r\n" */
+
     sdk_write_ctx_t *w = malloc(sizeof(*w));
     w->conn = c;
     w->body = c->res.body;   /* 接管所有权 */
-    size_t hl = 256 + strlen(ct) + 16;
+    size_t hl = 256 + strlen(ct) + 16 + extra + 8;
     w->header = malloc(hl);
+
     int n = snprintf(w->header, hl,
                      "HTTP/1.1 %d OK\r\n"
                      "Content-Type: %s\r\n"
                      "Content-Length: %zu\r\n"
-                     "Connection: %s\r\n"
-                     "\r\n",
+                     "Connection: %s\r\n",
                      code, ct, blen,
                      c->keep_alive ? "keep-alive" : "close");
+    /* 追加通过 cservice_res_header 设置的自定义头 */
+    for (int i = 0; i < c->res.header_count; i++)
+        n += snprintf(w->header + n, hl - (size_t)n, "%s: %s\r\n",
+                      c->res.headers[i].name, c->res.headers[i].value);
+    n += snprintf(w->header + n, hl - (size_t)n, "\r\n");
 
     uv_buf_t bufs[2];
     bufs[0] = uv_buf_init(w->header, (size_t)n);
@@ -239,12 +252,28 @@ void sdk_send_response(sdk_conn_t *c)
     uv_write(&w->req, (uv_stream_t *)&c->handle, bufs, nbufs, on_write_completed);
 }
 
+/* 跨线程停止唤醒回调：在目标 loop 所属线程中执行，打断其阻塞在 epoll_wait
+   的事件循环（uv_stop 无法唤醒一个没有定时器的阻塞 loop，必须用 async 写
+   eventfd/pipe 触发其立即返回）。 */
+static void on_async_wake(uv_async_t *a)
+{
+    uv_stop(a->loop);
+}
+
+/* 每个监听 socket 的上下文：回指 svc 与本 loop 的序号 */
+typedef struct {
+    cservice_t *svc;
+    int         loop_index;
+} sdk_srv_ctx_t;
+
 static void on_new_connection(uv_stream_t *server, int status)
 {
     if (status < 0) return;
-    cservice_t *svc = (cservice_t *)server->data;
+    sdk_srv_ctx_t *sc = (sdk_srv_ctx_t *)server->data;
+    cservice_t *svc = sc->svc;
     sdk_conn_t *c = calloc(1, sizeof(*c));
     c->svc = svc;
+    c->loop_index = sc->loop_index;
     uv_tcp_init(server->loop, &c->handle);
     c->handle.data = c;
 
@@ -264,13 +293,19 @@ static void on_new_connection(uv_stream_t *server, int status)
         uv_close((uv_handle_t *)&c->handle, on_conn_close);
 }
 
+int cservice_req_loop_id(const cservice_req_t *req)
+{
+    if (!req || !req->conn) return -1;
+    return ((sdk_conn_t *)req->conn)->loop_index;
+}
+
 /* ---------- 多 loop 启动 ---------- */
 
 /* uv_walk 回调：关闭 loop 内所有残留 handle（监听 + 长连接），避免 uv_loop_delete 断言 */
 static void close_walk_cb(uv_handle_t *h, void *arg)
 {
     (void)arg;
-    if (h) uv_close(h, NULL);
+    if (h && !uv_is_closing(h)) uv_close(h, NULL);
 }
 
 static void *worker_loop(void *arg)
@@ -291,17 +326,28 @@ int sdk_server_start_loops(cservice_t *svc)
     svc->nloops = n;
     svc->loops = calloc(n, sizeof(uv_loop_t *));
     svc->servers = calloc(n, sizeof(uv_tcp_t *));
+    svc->asyncs = calloc(n, sizeof(uv_async_t *));
     svc->threads = calloc(n, sizeof(pthread_t));
 
     int port = svc->port;
     int af = AF_INET; /* SDK 默认 IPv4；可扩展 */
+    int i;
 
-    for (int i = 0; i < n; i++)
+    for (i = 0; i < n; i++)
     {
         uv_loop_t *loop = uv_loop_new();
         uv_tcp_t *server = malloc(sizeof(uv_tcp_t));
         uv_tcp_init(loop, server);
-        server->data = svc;
+
+        /* 停止唤醒句柄：让 cservice_stop 能跨线程唤醒本 loop（uv_stop 无法唤醒
+           阻塞在 epoll 的 loop，故用 async 写 eventfd/pipe 触发其立即返回） */
+        svc->asyncs[i] = malloc(sizeof(uv_async_t));
+        uv_async_init(loop, svc->asyncs[i], on_async_wake);
+
+        sdk_srv_ctx_t *sc = malloc(sizeof(*sc));
+        sc->svc = svc;
+        sc->loop_index = i;
+        server->data = sc;
 
         int fd = socket(af, SOCK_STREAM, 0);
         if (fd < 0) { perror("socket"); goto fail; }
@@ -330,6 +376,12 @@ int sdk_server_start_loops(cservice_t *svc)
     return 0;
 
 fail:
+    /* 停止并回收已启动的 worker 线程（其余字段由 sdk_server_stop 释放） */
+    for (int j = 0; j < i; j++)
+    {
+        if (svc->asyncs[j]) uv_async_send(svc->asyncs[j]);
+        pthread_join(svc->threads[j], NULL);
+    }
     sdk_server_stop(svc);
     return -1;
 }
@@ -340,13 +392,14 @@ void sdk_server_stop(cservice_t *svc)
     for (int i = 0; i < svc->nloops; i++)
     {
         if (svc->loops[i])
+            free(svc->loops[i]);           /* worker 线程内部已 uv_loop_close */
+        if (svc->servers[i])
         {
-            uv_stop(svc->loops[i]);
-            pthread_join(svc->threads[i], NULL);
-            /* worker 线程内部已 uv_loop_close，这里仅释放结构体 */
-            free(svc->loops[i]);
+            free(svc->servers[i]->data);   /* sdk_srv_ctx_t */
+            free(svc->servers[i]);
         }
-        free(svc->servers[i]);
+        if (svc->asyncs && svc->asyncs[i])
+            free(svc->asyncs[i]);
     }
     svc->nloops = 0;
 }

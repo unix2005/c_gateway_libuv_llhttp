@@ -8,7 +8,7 @@
  * 尚未调用也不致崩溃。
  */
 #include "sdk_internal.h"
-#include <q/log.h>
+#include <q_log.h>
 #include <string.h>
 #include <stdarg.h>
 

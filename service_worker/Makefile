@@ -17,7 +17,8 @@ OBJ_DIR = .
 # 目标文件（排除 v1，因为它使用不同的架构）
 TARGETS = $(BIN_DIR)/worker_service_v2 \
           $(BIN_DIR)/worker_service_v3 \
-          $(BIN_DIR)/worker_service_v3_1
+          $(BIN_DIR)/worker_service_v3_1 \
+          $(BIN_DIR)/worker_service_v4
 
 # 源文件
 V2_SRC = worker_service_v2.c
@@ -73,6 +74,18 @@ $(BIN_DIR)/worker_service_v3_1: $(V3_1_OBJ)
 $(OBJ_DIR)/worker_service_v3_1.o: $(V3_1_SRC)
 	$(CC) $(CFLAGS) -c -o $@ $<
 	@echo "[CC] $<"
+
+# ============================================================================
+# Worker Service v4 (真·多线程高性能版 - 基于 libcservice SDK)
+# ============================================================================
+SDK_DIR := ../sdk
+SDK_LIB := $(SDK_DIR)/dist/lib
+
+$(BIN_DIR)/worker_service_v4: worker_service_v4.c
+	$(CC) $(CFLAGS) -I$(SDK_DIR)/include $< -o $@ \
+	  -L$(SDK_LIB) -lcservice -luv -lllhttp -lcjson -lcurl -lpthread \
+	  -Wl,-rpath,'$$ORIGIN/../sdk/dist/lib'
+	@echo "[LINK] $@"
 
 # ============================================================================
 # 清理
@@ -133,6 +146,7 @@ help:
 v2: $(BIN_DIR)/worker_service_v2
 v3: $(BIN_DIR)/worker_service_v3
 v3_1: $(BIN_DIR)/worker_service_v3_1
+v4: $(BIN_DIR)/worker_service_v4
 
 # 声明伪目标
-.PHONY: all dirs clean check-deps help v2 v3 v3_1
+.PHONY: all dirs clean check-deps help v2 v3 v3_1 v4

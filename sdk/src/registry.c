@@ -4,6 +4,7 @@
  */
 #include "sdk_internal.h"
 #include <curl/curl.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -85,9 +86,15 @@ int sdk_registry_unregister(cservice_t *svc)
 void *sdk_registry_heartbeat(void *arg)
 {
     cservice_t *svc = (cservice_t *)arg;
+    /* 用心跳间隔细粒度轮询，避免长 sleep 阻塞优雅退出（关闭时最长多等 ~100ms） */
+    int steps = 5 * 10; /* 心跳间隔固定 5s，细粒度轮询 */
     while (svc->hb_running)
     {
-        sleep(5);
+        for (int k = 0; k < steps && svc->hb_running; k++)
+        {
+            struct timespec ts = {0, 100000000}; /* 100ms */
+            nanosleep(&ts, NULL);
+        }
         if (!svc->hb_running) break;
         if (svc->register_enabled)
             sdk_registry_register(svc); /* 幂等刷新，网关侧按 name+host+port 去重 */

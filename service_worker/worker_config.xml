@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 多线程工作服务 v4 配置文件 -->
+<!-- 文档根必须为 <service>，其余节点为其子元素；键以“点分路径”表示，对应 XPath：
+     例如 service.port        -> /service/port/text()
+          service.gateway.host -> /service/gateway/host/text() -->
+<service>
+    <!-- 服务名（注册到网关的名称） -->
+    <name>worker-service</name>
+    <!-- 监听地址：0.0.0.0 表示监听所有网卡 -->
+    <host>0.0.0.0</host>
+    <!-- 监听端口 -->
+    <port>8082</port>
+    <!-- worker loop 线程数：0 = 自动按 CPU 核数；>0 则固定该值 -->
+    <threads>0</threads>
+    <!-- 注册到网关的路径前缀（网关仅把该前缀流量转发给本服务） -->
+    <path_prefix>/api/worker</path_prefix>
+    <!-- 健康检查路径（方案 B：与 path_prefix 保持一致，网关探针打此路径） -->
+    <health_path>/api/worker/health</health_path>
+    <!-- 任务表上限（运行时动态分配，范围 1..1048576，越界回落到 4096） -->
+    <max_jobs>4096</max_jobs>
+
+    <!-- 路由路径（处理函数与 HTTP method 固定，不可配置；health 路由默认与
+         health_path 一致，确保网关探针路径对齐） -->
+    <routes>
+        <health>/api/worker/health</health>
+        <jobs>/api/worker/jobs</jobs>
+        <employees>/api/worker/employees</employees>
+    </routes>
+
+    <gateway>
+        <!-- 网关地址与端口（本服务自动注册到此处） -->
+        <host>127.0.0.1</host>
+        <port>8080</port>
+    </gateway>
+</service>

@@ -3,8 +3,7 @@
  * @brief libcservice 生命周期与路由管理
  */
 #include "sdk_internal.h"
-#include <q/log.h>
-#include <q/core/types.h>
+#include "q_log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -174,9 +173,10 @@ void cservice_stop(cservice_t *svc)
 {
     if (!svc) return;
     svc->stop = 1;
+    /* 用 async 跨线程唤醒各 worker loop（uv_stop 无法唤醒阻塞在 epoll 的 loop） */
     for (int i = 0; i < svc->nloops; i++)
-        if (svc->loops[i])
-            uv_stop(svc->loops[i]);
+        if (svc->asyncs && svc->asyncs[i])
+            uv_async_send(svc->asyncs[i]);
 }
 
 void cservice_destroy(cservice_t *svc)
@@ -191,6 +191,7 @@ void cservice_destroy(cservice_t *svc)
     free(svc->routes);
     free(svc->loops);
     free(svc->servers);
+    free(svc->asyncs);
     free(svc->threads);
     free(svc);
 }
