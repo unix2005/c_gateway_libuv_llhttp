@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  vr_question 表 SQL 映射（对标 MyBatis XML Mapper）。
+  SQL 全部外置，改 SQL 不用动 C 代码。运行期由 q_mapper_load 解析成 AST。
+  支持标签：select/insert/update/delete、if、choose/when/otherwise、where、set、foreach、sql/include。
+  条件写法：#{name} 预编译参数绑定（防注入），${name} 直接拼接（仅白名单标识符）。
+-->
+<mapper namespace="VrQuestion">
+
+    <!-- 全部列（避免 SELECT *，列顺序与类型由这里统一控制） -->
+    <sql id="Base_Column_List">
+        id, question_code, role_code, category, question_text, scene_desc,
+        hint, answer_text, standard_answer, critical_errors, rubric, scoring_note,
+        score, difficulty, sort_order, status, is_current, city_code, city_name,
+        create_time, update_time
+    </sql>
+
+    <!--
+        通用条件查询：参数按需过滤（params 里没有该 key 就不拼对应条件）。
+        前端可用：role_code / category / status / is_current / city_name。
+        约定：city_name 命中“本城市题目 或 公共题目(city_name='')”。
+    -->
+    <select id="selectList">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM vr_question
+        <where>
+            <if test="role_code != null and role_code != ''">
+                AND role_code = #{role_code}
+            </if>
+            <if test="category != null and category != ''">
+                AND category = #{category}
+            </if>
+            <if test="status != null">
+                AND status = #{status}
+            </if>
+            <if test="is_current != null">
+                AND is_current = #{is_current}
+            </if>
+            <if test="city_name != null and city_name != ''">
+                AND (city_name = #{city_name} OR city_name = '')
+            </if>
+        </where>
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <!--
+        设备 / 数字人拉取：取“当前使用 + 启用”的题目，城市命中或公共题目。
+        命中联合索引 (role_code, is_current, status, city_name)。
+        必填：role_code；可选：city_name（不传则只返回公共题目 city_name=''）。
+    -->
+    <select id="selectCurrentByRole">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM vr_question
+        WHERE role_code = #{role_code}
+          AND is_current = 1
+          AND status = 1
+          <if test="city_name != null and city_name != ''">
+            AND city_name = #{city_name}
+          </if>
+          <if test="city_name == null or city_name == ''">
+            AND city_name = ''
+          </if>
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <!-- 按题目编码取单条（question_code 唯一） -->
+    <select id="selectByCode">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM vr_question
+        WHERE question_code = #{question_code}
+        LIMIT 1
+    </select>
+
+</mapper>

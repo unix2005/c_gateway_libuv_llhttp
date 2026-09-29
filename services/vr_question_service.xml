@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VR 献血题库服务配置（基于 SDK 的 q_xml_cfg 模块，点分键读取，如 mysql.port）
+  运行：./vr_question_service [本文件]   或   VR_CONFIG=本文件 ./vr_question_service
+-->
+<service>
+    <!-- 服务名（注册到网关的名称） -->
+    <name>vr-question-service</name>
+    <!-- 监听地址与端口 -->
+    <host>0.0.0.0</host>
+    <port>8090</port>
+
+    <!-- worker 线程数（多 event-loop 模型）：默认 1。
+         注意：当前并发请求路径存在堆损坏 bug（biz_work 在线程池并发时崩溃），
+         >1 会在高并发下直接 SIGABRT，修复前请保持 1 -->
+    <threads>1</threads>
+
+    <!-- 日志配置：dir 可为相对路径(相对启动目录)或绝对路径；level 取值
+         trace / debug / info / warn / error / fatal（缺省 info） -->
+    <log>
+        <dir>logs</dir>
+        <level>info</level>
+    </log>
+
+    <!-- MySQL 连接：用户名 / 密码 / ip / port / 库名 分别配置 -->
+    <mysql>
+        <host>127.0.0.1</host>
+        <port>3306</port>
+        <user>digitalvr</user>
+        <!-- 密码：留明文可直接用；生产环境用 sm4_tool enc <明文> 生成十六进制密文写入此处，
+             运行时由 SDK 的 SM4-CBC（密钥/IV 取自环境变量 SM4_KEY / SM4_IV）解密。 -->
+        <password>61f6dcf556ebda7d5339327b2394dbcb</password>
+        <database>digital_vr</database>
+        <charset>utf8mb4</charset>
+        <!-- 连接池参数 -->
+        <max_open>8</max_open>
+        <idle_secs>60</idle_secs>
+        <nshards>4</nshards>
+    </mysql>
+
+    <!-- 将要读取的 mapper 文件：支持配置多个 <file>，统一加载合并到同一 mapper。
+         也可改用 <path>单文件或目录</path>（目录则加载其下全部 *.xml）。 -->
+    <mapper>
+        <file>./mapper/vr_question_mapper.xml</file>
+        <file>./mapper/common_mapper.xml</file>
+    </mapper>
+
+    <!-- 网关注册（enable=true 时自动注册，仅承接 path_prefix 前缀流量） -->
+    <gateway>
+        <enable>true</enable>
+        <host>127.0.0.1</host>
+        <port>8080</port>
+        <path_prefix>/api/vr-questions</path_prefix>
+    </gateway>
+</service>

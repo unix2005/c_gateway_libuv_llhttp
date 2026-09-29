@@ -5,7 +5,8 @@
 #include "async.h"
 #include <stdlib.h>
 
-typedef struct {
+typedef struct 
+{
     async_work_t work;
     async_done_t done;
     void        *data;

@@ -7,11 +7,13 @@ CFLAGS  ?= -std=c99 -Wall -Wextra -g -O2 -fPIC -D_GNU_SOURCE
 INCS    := -Iinclude $(shell pkg-config --cflags libxml-2.0 2>/dev/null) $(shell xml2-config --cflags 2>/dev/null)
 # libxml2：优先 pkg-config，macOS 上常缺失，回退到 xml2-config
 LIBS    := -luv -lllhttp -lcjson -lcurl -lpthread -ljansson \
-           $(shell pkg-config --libs libxml-2.0 2>/dev/null) $(shell xml2-config --libs 2>/dev/null)
+           $(shell pkg-config --libs libxml-2.0 2>/dev/null) $(shell xml2-config --libs 2>/dev/null) \
+           $(shell pkg-config --libs libcrypto 2>/dev/null)
 
 SRC_DIR := src
 # 业务模块 + SDK 内置的 q_log 无锁异步日志（含最小 q 核心依赖 time.c/types.c）
-# + db（连接池/驱动抽象）+ mapper（XML SQL Mapper），均复用 q_log.h / q_core 基础件
+# + db（连接池/驱动抽象）+ mapper（XML SQL Mapper）+ sm4（SM4-CBC 加解密），
+# 均复用 q_log.h / q_core 基础件
 SRCS    := $(SRC_DIR)/core.c $(SRC_DIR)/server.c $(SRC_DIR)/router.c \
            $(SRC_DIR)/request.c $(SRC_DIR)/response.c $(SRC_DIR)/registry.c \
            $(SRC_DIR)/config.c $(SRC_DIR)/logger.c $(SRC_DIR)/q_xml_cfg.c \
@@ -19,6 +21,7 @@ SRCS    := $(SRC_DIR)/core.c $(SRC_DIR)/server.c $(SRC_DIR)/router.c \
            $(SRC_DIR)/q_ds.c $(SRC_DIR)/q_str.c \
            $(SRC_DIR)/async.c \
            $(SRC_DIR)/http_client.c \
+           $(SRC_DIR)/sm4.c \
            $(SRC_DIR)/db/db.c $(SRC_DIR)/db/driver/mock/q_db_mock.c \
            $(SRC_DIR)/mapper/mapper.c $(SRC_DIR)/mapper/loader.c $(SRC_DIR)/mapper/expr.c
 
@@ -72,6 +75,7 @@ install: all
 	cp include/db.h $(INCDIR)/
 	cp include/db_mock.h $(INCDIR)/
 	cp include/mapper.h $(INCDIR)/
+	cp include/sm4.h $(INCDIR)/
 	@echo "已安装到 $(DIST)/{include,lib}（库由构建步骤直接产出至 dist/lib）"
 
 examples: shared

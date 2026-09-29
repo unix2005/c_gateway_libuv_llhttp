@@ -29,7 +29,9 @@ typedef struct {
 
 typedef struct {
     char   name[32];
-    char   path[Q_LOG_PATH_LEN];
+    /* 需容纳 g_dir + '/' + g_app + '.' + name + ".log"，最长约 611 字节，
+     * 故在 Q_LOG_PATH_LEN 基础上留足余量，消除 -Wformat-truncation= 告警 */
+    char   path[Q_LOG_PATH_LEN + 192];
     int    fd;
     size_t max_bytes;
     size_t cur_bytes;
@@ -126,7 +128,8 @@ static int cat_open(q_cat_t *c)
 static void cat_rotate(q_cat_t *c)
 {
     char ts[32];
-    char dst[Q_LOG_PATH_LEN+32];
+    /* 需容纳完整 path（最长约 703 字节）+ '.' + 时间戳(31)，故比 path 再留余量 */
+    char dst[Q_LOG_PATH_LEN + 256];
 
     if (c->fd >= 0) {
         close(c->fd);

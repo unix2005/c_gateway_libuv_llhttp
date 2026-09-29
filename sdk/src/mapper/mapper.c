@@ -471,6 +471,44 @@ void q_mapper_free(q_mapper_t *m)
     free(m);
 }
 
+q_mapper_t *q_mapper_load_files(const char * const *paths, int n)
+{
+    q_array_t   defs;
+    q_mapper_t *m;
+    char        err[256];
+
+    if (paths == NULL || n <= 0) return NULL;
+
+    m = calloc(1, sizeof(*m));
+    if (m == NULL) return NULL;
+    m->stmts = q_hash_new(64);
+    if (m->stmts == NULL) {
+        free(m);
+        return NULL;
+    }
+
+    q_array_init(&defs, 16);
+    for (int i = 0; i < n; i++) {
+        const char *p = paths[i];
+        if (p == NULL || *p == '\0') continue;
+        if (q_mapper_parse_file(p, &defs, err, sizeof(err)) != Q_OK)
+            q_error("mapper load failed: %s (%s)", p, err);
+        else
+            q_info("mapper loaded: %s", p);
+    }
+
+    for (size_t i = 0; i < defs.len; i++) {
+        q_stmt_def_t *sd = (q_stmt_def_t *)defs.items[i];
+        q_hash_set(m->stmts, sd->id, sd);
+    }
+    q_array_free(&defs);
+
+    if (q_hash_size(m->stmts) == 0)
+        q_error("mapper: no statement loaded from given files");
+
+    return m;
+}
+
 int q_mapper_size(const q_mapper_t *m) { return (int)q_hash_size(m->stmts); }
 
 int q_mapper_has(const q_mapper_t *m, const char *id)

@@ -149,6 +149,7 @@ int service_register_with_ipv6(const char *name, const char *description,
     }
 
     service_instance_t *inst = NULL;
+    int is_new = 0;
     for (int k = 0; k < existing->instance_count; k++)
     {
         if (strcmp(existing->instances[k].host, host) == 0 &&
@@ -162,6 +163,7 @@ int service_register_with_ipv6(const char *name, const char *description,
     {
         inst = &existing->instances[existing->instance_count++];
         memset(inst, 0, sizeof(service_instance_t)); // ✓ 清零实例
+        is_new = 1;
     }
     else
     {
@@ -203,9 +205,18 @@ int service_register_with_ipv6(const char *name, const char *description,
 
     const char *proto_str = (protocol == PROTOCOL_HTTPS) ? "HTTPS" : "HTTP";
     const char *ip_ver = is_ipv6 ? "IPv6" : "IPv4";
-    log_info(NULL, "registry_instance_added",
-             "服务实例注册：%s -> [%s] %s:%d (%s)",
-             name, ip_ver, host, port, proto_str);
+    if (is_new)
+    {
+        log_info(NULL, "registry_instance_added",
+                 "服务实例注册：%s -> [%s] %s:%d (%s)",
+                 name, ip_ver, host, port, proto_str);
+    }
+    else
+    {
+        log_debug(NULL, "registry_instance_refreshed",
+                  "服务实例心跳刷新：%s -> [%s] %s:%d (%s)",
+                  name, ip_ver, host, port, proto_str);
+    }
     return 0;
 }
 

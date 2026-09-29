@@ -251,6 +251,62 @@ double config_get_float(config_ctx_t *ctx, const char *key,
 }
 
 /**
+ * @brief 读取同一键的多个值（如多个 <file> 节点）
+ * @param ctx 配置上下文
+ * @param key 点分键
+ * @param out 输出：char* 数组（每个元素 strdup 分配，调用者逐个 free 后 free 数组）
+ * @return 元素个数（>=0）；键不存在或出错返回 0 且 *out 置 NULL
+ */
+int config_get_string_list(config_ctx_t *ctx, const char *key, char ***out) 
+{
+  if (out) *out = NULL;
+  if (!ctx || !key || !out) return 0;
+
+  char *xpath = key_to_xpath(key);   /* 形如 "/a/b/c/text()" */
+  if (!xpath) return 0;
+
+  /* 去掉末尾的 /text()，改为取元素节点集合 */
+  size_t L = strlen(xpath);
+  if (L > 7 && strcmp(xpath + L - 7, "/text()") == 0)
+    xpath[L - 7] = '\0';
+
+  xmlXPathObjectPtr result = xmlXPathEvalExpression(BAD_CAST xpath, ctx->xpath);
+  free(xpath);
+  if (!result || !result->nodesetval) 
+  {
+    if (result) xmlXPathFreeObject(result);
+    return 0;
+  }
+
+  int n = result->nodesetval->nodeNr;
+  if (n == 0) 
+  {
+    xmlXPathFreeObject(result);
+    return 0;
+  }
+
+  char **arr = malloc(sizeof(char *) * (size_t)n);
+  if (!arr) 
+  {
+    xmlXPathFreeObject(result);
+    return 0;
+  }
+
+  for (int i = 0; i < n; i++) 
+  {
+    xmlNodePtr node = result->nodesetval->nodeTab[i];
+    xmlChar *txt = xmlNodeGetContent(node);   /* 对元素/文本节点都安全 */
+    const char *c = (txt != NULL) ? (const char *)txt : "";
+    arr[i] = strdup(c);
+    if (txt) xmlFree(txt);
+  }
+  xmlXPathFreeObject(result);
+
+  *out = arr;
+  return n;
+}
+
+/**
  * @brief 检查配置项是否存在
  * @param ctx 配置上下文
  * @param key 点分键

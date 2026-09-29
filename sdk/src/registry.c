@@ -35,6 +35,14 @@ static char *build_payload(cservice_t *svc)
     return s;
 }
 
+/* 丢弃响应体：未设置 WRITEFUNCTION 时 libcurl 默认把 HTTP body 写到 stdout，
+ * 会导致注册/心跳时把网关回的 JSON 刷到服务屏幕（vr-question.out）。这里直接丢弃。 */
+static size_t sink_write_cb(void *ptr, size_t size, size_t nmemb, void *userdata)
+{
+    (void)ptr; (void)userdata;
+    return size * nmemb;
+}
+
 /*
  * 通用 HTTP 方法发送（注册用 POST，注销用 DELETE，两者都带 JSON body）。
  * 网关对注册要求 200/201，注销要求 200，故成功判定保持原样。
@@ -53,6 +61,8 @@ static int do_http(const char *method, const char *url, const char *payload)
     if (payload)
         curl_easy_setopt(c, CURLOPT_POSTFIELDS, payload);
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, sink_write_cb);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, NULL);
     curl_easy_setopt(c, CURLOPT_TIMEOUT, 5L);
     curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
 
@@ -87,7 +97,7 @@ void *sdk_registry_heartbeat(void *arg)
 {
     cservice_t *svc = (cservice_t *)arg;
     /* 用心跳间隔细粒度轮询，避免长 sleep 阻塞优雅退出（关闭时最长多等 ~100ms） */
-    int steps = 5 * 10; /* 心跳间隔固定 5s，细粒度轮询 */
+    int steps = 60 * 10; /* 心跳间隔固定 5s，细粒度轮询 */
     while (svc->hb_running)
     {
         for (int k = 0; k < steps && svc->hb_running; k++)

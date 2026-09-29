@@ -93,6 +93,19 @@ char* config_get_string(config_ctx_t *ctx, const char *key,
 bool config_get_bool(config_ctx_t *ctx, const char *key, bool default_value);
 
 /**
+ * 读取字符串列表（同一键在 XML 中出现多次，如多个 <file>../</file>）。
+ * 例如配置：
+ *   <mapper><file>a.xml</file><file>b.xml</file></mapper>
+ * 以 key="service.mapper.file" 调用可得到 ["a.xml","b.xml"]。
+ * @param ctx 配置上下文
+ * @param key 点分键
+ * @param out 输出参数：char* 数组（每个元素由本函数 strdup 分配，
+ *            调用者须逐个 free() 后 free() 该数组本身）
+ * @return 元素个数（>=0）；键不存在或出错时返回 0，并将 *out 置为 NULL
+ */
+int config_get_string_list(config_ctx_t *ctx, const char *key, char ***out);
+
+/**
  * 读取浮点数配置
  * @param ctx 配置上下文
  * @param key 配置键

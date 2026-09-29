@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 公共 / 工具类 SQL（演示 mapper 支持“多文件”加载，与业务 mapper 合并到同一 mapper） -->
+<mapper namespace="Common">
+    <select id="selectNow">
+        SELECT NOW() AS now_time
+    </select>
+
+    <select id="selectVersion">
+        SELECT VERSION() AS db_version
+    </select>
+</mapper>

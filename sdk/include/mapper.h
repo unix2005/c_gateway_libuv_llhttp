@@ -21,6 +21,11 @@ typedef struct q_ctx    q_ctx_t;
 
 /* 启动期：加载目录下所有 *.xml（非递归）或单个 .xml 文件 */
 q_mapper_t *q_mapper_load(const char *path);
+
+/* 启动期：加载多个 mapper 文件（paths[0..n)），合并到同一个 mapper。
+ * 用于把不同业务表的 SQL 拆分到多个 xml 文件、统一加载。 */
+q_mapper_t *q_mapper_load_files(const char * const *paths, int n);
+
 void        q_mapper_free(q_mapper_t *m);
 int         q_mapper_size(const q_mapper_t *m);
 int         q_mapper_has(const q_mapper_t *m, const char *id);

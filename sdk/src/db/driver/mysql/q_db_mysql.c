@@ -13,6 +13,9 @@
 #include <string.h>
 
 #define MY_ERRBUF 256
+/* 结果集列数上界：分配前做边界保护，消除无符号/int 范围推导引发的
+ * -Walloc-size-larger-than= 告警，也防止异常元数据导致巨大分配。 */
+#define MY_MAX_RESULT_COLS 4096
 
 typedef struct {
     int         kind;          /* 0 = 文本结果集(MYSQL_RES)，1 = 预处理结果集 */
@@ -339,6 +342,9 @@ static int bind_out_buffers(my_result_t *mr)
 {
     size_t total = 0;
 
+    if (mr->ncols <= 0 || mr->ncols > MY_MAX_RESULT_COLS)
+        return Q_ERR;
+
     mr->out      = calloc((size_t)mr->ncols, sizeof(MYSQL_BIND));
     mr->out_len  = calloc((size_t)mr->ncols, sizeof(unsigned long));
     mr->out_null = calloc((size_t)mr->ncols, sizeof(my_bool));
@@ -426,6 +432,11 @@ static int my_stmt_exec(void *stmt, void **res, uint64_t *affected, uint64_t *in
     mr->kind   = 1;
     mr->stmt   = ms->stmt;
     mr->ncols  = ms->ncols;
+    if (mr->ncols <= 0 || mr->ncols > MY_MAX_RESULT_COLS) {
+        my_res_free(mr);
+        copy_err(err, errlen, "invalid result column count");
+        return Q_ERR;
+    }
     mr->names  = calloc((size_t)mr->ncols, sizeof(char *));
 
     MYSQL_RES *meta = mysql_stmt_result_metadata(ms->stmt);
