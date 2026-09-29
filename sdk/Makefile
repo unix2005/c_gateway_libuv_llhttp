@@ -24,7 +24,8 @@ SRCS    := $(SRC_DIR)/core.c $(SRC_DIR)/server.c $(SRC_DIR)/router.c \
 
 # MySQL 驱动（mariadb-connector-c，可选）：探测到头文件才编入，否则自动跳过。
 # 这样 SDK 在没装驱动的环境里也能构建（mock 驱动始终可用）。
-MARIADB_PREFIX ?= /usr/local/opt/mariadb-connector-c
+#MARIADB_PREFIX ?= /usr/local/opt/mariadb-connector-c
+MARIADB_PREFIX ?= /usr
 ifneq ($(wildcard $(MARIADB_PREFIX)/include/mariadb/mysql.h),)
   SRCS += $(SRC_DIR)/db/driver/mysql/q_db_mysql.c
   INCS += -I$(MARIADB_PREFIX)/include/mariadb
