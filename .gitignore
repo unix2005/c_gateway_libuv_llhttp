@@ -21,6 +21,10 @@ sdk/examples/logs/
 sdk/logs/
 sdk/include/q/
 sdk/src/qcore/
+sdk/src/db/*.o
+sdk/src/db/driver/mock/*.o
+sdk/src/db/driver/mysql/*.o
+sdk/src/mapper/*.o
 
 # ===== 日志 =====
 logs/
