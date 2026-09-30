@@ -757,7 +757,7 @@ int q_mapper_has(const q_mapper_t *m, const char *id)
  * @param[in] pool 数据库连接池
  * @return 成功返回 q_ctx_t*，参数非法或内存不足返回 NULL
  */
-q_ctx_t *q_ctx_new(q_mapper_t *m, q_dbp_t *pool)
+q_ctx_t *q_mapper_ctx_new(q_mapper_t *m, q_dbp_t *pool)
 {
   q_ctx_t *c;
   if (m == NULL)
@@ -775,14 +775,14 @@ q_ctx_t *q_ctx_new(q_mapper_t *m, q_dbp_t *pool)
  * @brief 释放 mapper 执行上下文
  * @param[in,out] c 待释放的上下文（仅释放本体，不影响 mapper 与连接池）
  */
-void q_ctx_free(q_ctx_t *c) { free(c); }
+void q_mapper_ctx_free(q_ctx_t *c) { free(c); }
 /**
  * @brief 开关上下文的 SQL 调试日志
  * @details 开启后执行时会通过 "sql" 分类打印最终 SQL 及参数个数。
  * @param[in,out] c 执行上下文
  * @param[in] on 非零开启，零关闭
  */
-void q_ctx_debug(q_ctx_t *c, int on)
+void q_mapper_ctx_debug(q_ctx_t *c, int on)
 {
   if (c != NULL)
     c->debug = on ? 1 : 0;
@@ -796,7 +796,7 @@ void q_ctx_debug(q_ctx_t *c, int on)
  * @param[in] errlen 错误缓冲长度
  * @return 成功返回连接指针，失败返回 NULL
  */
-q_conn_t *q_ctx_tx(q_ctx_t *c, char *err, size_t errlen)
+q_conn_t *q_mapper_ctx_tx(q_ctx_t *c, char *err, size_t errlen)
 {
   if (c == NULL || c->pool == NULL)
     return NULL;
@@ -925,7 +925,7 @@ static int exec_prepared(q_ctx_t *c, q_stmt_def_t *sd, json_t *params, q_result_
  * @param[in] errlen 错误缓冲长度
  * @return Q_OK 成功，否则错误码（如语句不存在、内存不足等）
  */
-int q_ctx_query(q_ctx_t *c, const char *id, json_t *params, json_t **out, char *err, size_t errlen)
+int q_mapper_ctx_query(q_ctx_t *c, const char *id, json_t *params, json_t **out, char *err, size_t errlen)
 {
   q_stmt_def_t *sd;
   q_result_t *res = NULL;
@@ -1003,8 +1003,8 @@ int q_ctx_query(q_ctx_t *c, const char *id, json_t *params, json_t **out, char *
  * @param[in] errlen 错误缓冲长度
  * @return Q_OK 成功，否则错误码
  */
-int q_ctx_exec(q_ctx_t *c, const char *id, json_t *params, uint64_t *affected, uint64_t *insert_id, char *err,
-               size_t errlen)
+int q_mapper_ctx_exec(q_ctx_t *c, const char *id, json_t *params, uint64_t *affected, uint64_t *insert_id, char *err,
+                      size_t errlen)
 {
   q_stmt_def_t *sd;
 
@@ -1031,10 +1031,10 @@ int q_ctx_exec(q_ctx_t *c, const char *id, json_t *params, uint64_t *affected, u
  * @param[in] errlen 错误缓冲长度
  * @return Q_OK 成功，否则错误码
  */
-int q_ctx_insert(q_ctx_t *c, const char *id, json_t *params, uint64_t *insert_id, char *err, size_t errlen)
+int q_mapper_ctx_insert(q_ctx_t *c, const char *id, json_t *params, uint64_t *insert_id, char *err, size_t errlen)
 {
   uint64_t affected = 0;
-  return q_ctx_exec(c, id, params, &affected, insert_id, err, errlen);
+  return q_mapper_ctx_exec(c, id, params, &affected, insert_id, err, errlen);
 }
 
 /**
@@ -1053,8 +1053,8 @@ int q_ctx_insert(q_ctx_t *c, const char *id, json_t *params, uint64_t *insert_id
  * @param[in] errlen 错误缓冲长度
  * @return 实际写入的结构体行数
  */
-int q_ctx_query_struct(q_ctx_t *c, const char *id, json_t *params, const q_field_t *fields, void *out, size_t stride,
-                       size_t cap, char *err, size_t errlen)
+int q_mapper_ctx_query_struct(q_ctx_t *c, const char *id, json_t *params, const q_field_t *fields, void *out,
+                              size_t stride, size_t cap, char *err, size_t errlen)
 {
   q_stmt_def_t *sd;
   q_result_t *res = NULL;

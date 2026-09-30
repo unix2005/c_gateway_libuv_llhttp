@@ -31,23 +31,23 @@ int         q_mapper_size(const q_mapper_t *m);
 int         q_mapper_has(const q_mapper_t *m, const char *id);
 
 /* 运行期：一个 ctx 绑定 mapper + 连接池，ctx 不跨线程共享 */
-q_ctx_t *q_ctx_new(q_mapper_t *m, q_dbp_t *pool);
-void     q_ctx_free(q_ctx_t *c);
-void     q_ctx_debug(q_ctx_t *c, int on);        /* 打印生成的 SQL 与耗时 */
+q_ctx_t *q_mapper_ctx_new(q_mapper_t *m, q_dbp_t *pool);
+void     q_mapper_ctx_free(q_ctx_t *c);
+void     q_mapper_ctx_debug(q_ctx_t *c, int on);        /* 打印生成的 SQL 与耗时 */
 
 /*
  * params 是 json 对象，键名对应 XML 里 #{name} / ${name}。
  * query 返回结果集（json 数组，每行一个对象）；exec 用于 insert/update/delete。
  */
-int q_ctx_query(q_ctx_t *c, const char *id, json_t *params, json_t **out,
+int q_mapper_ctx_query(q_ctx_t *c, const char *id, json_t *params, json_t **out,
                 char *err, size_t errlen);
-int q_ctx_exec(q_ctx_t *c, const char *id, json_t *params,
+int q_mapper_ctx_exec(q_ctx_t *c, const char *id, json_t *params,
                uint64_t *affected, uint64_t *insert_id, char *err, size_t errlen);
-int q_ctx_insert(q_ctx_t *c, const char *id, json_t *params, uint64_t *insert_id,
+int q_mapper_ctx_insert(q_ctx_t *c, const char *id, json_t *params, uint64_t *insert_id,
                  char *err, size_t errlen);
 
 /* 事务：内部走 ThreadLocal 连接，commit/rollback 后自动归还 */
-q_conn_t *q_ctx_tx(q_ctx_t *c, char *err, size_t errlen);
+q_conn_t *q_mapper_ctx_tx(q_ctx_t *c, char *err, size_t errlen);
 
 /* ---------------- 结果集 → struct ---------------- */
 
@@ -70,7 +70,7 @@ typedef struct {
 #define Q_FIELD_END { NULL, 0, 0, 0 }
 
 /* out 为数组首地址，stride = sizeof(结构体)，cap 为数组容量；返回行数 */
-int q_ctx_query_struct(q_ctx_t *c, const char *id, json_t *params,
+int q_mapper_ctx_query_struct(q_ctx_t *c, const char *id, json_t *params,
                        const q_field_t *fields, void *out,
                        size_t stride, size_t cap, char *err, size_t errlen);
 
