@@ -15,35 +15,32 @@
 /* GET /api/orders?id=xxx */
 static void orders_list(cservice_req_t *req, cservice_res_t *res)
 {
-    const char *id = cservice_req_query(req, "id");
-    cservice_res_printf(res, 200, "application/json",
-                        "{\"service\":\"order-service\",\"id\":\"%s\"}",
-                        id ? id : "none");
+  const char *id = cservice_req_query(req, "id");
+  cservice_res_printf(res, 200, "application/json", "{\"service\":\"order-service\",\"id\":\"%s\"}", id ? id : "none");
 }
 
 /* POST /api/orders */
 static void orders_create(cservice_req_t *req, cservice_res_t *res)
 {
-    size_t len = 0;
-    const char *body = cservice_req_body(req, &len);
-    int sample = (int)(len > 20 ? 20 : len);
-    cservice_res_printf(res, 201, "application/json",
-                        "{\"created\":true,\"received_bytes\":%zu,\"sample\":\"%.*s\"}",
-                        len, sample, body ? body : "");
+  size_t len = 0;
+  const char *body = cservice_req_body(req, &len);
+  int sample = (int)(len > 20 ? 20 : len);
+  cservice_res_printf(res, 201, "application/json", "{\"created\":true,\"received_bytes\":%zu,\"sample\":\"%.*s\"}",
+                      len, sample, body ? body : "");
 }
 
 int main(void)
 {
-    cservice_t *svc = cservice_init("order-service", "0.0.0.0", 8081);
+  cservice_t *svc = cservice_init("order-service", "0.0.0.0", 8081);
 
-    /* 自动注册到网关（同机 127.0.0.1:8080），并仅承接 /api/orders 前缀 */
-    cservice_set_gateway(svc, "127.0.0.1", 8080);
-    cservice_set_path_prefix(svc, "/api/orders");
+  /* 自动注册到网关（同机 127.0.0.1:8080），并仅承接 /api/orders 前缀 */
+  cservice_set_gateway(svc, "127.0.0.1", 8080);
+  cservice_set_path_prefix(svc, "/api/orders");
 
-    CSERVICE_ROUTE(svc, CSERVICE_GET,  "/api/orders", orders_list);
-    CSERVICE_ROUTE(svc, CSERVICE_POST, "/api/orders", orders_create);
+  CSERVICE_ROUTE(svc, CSERVICE_GET, "/api/orders", orders_list);
+  CSERVICE_ROUTE(svc, CSERVICE_POST, "/api/orders", orders_create);
 
-    cservice_run(svc);     /* 阻塞运行，直到 SIGINT/SIGTERM */
-    cservice_destroy(svc);
-    return 0;
+  cservice_run(svc); /* 阻塞运行，直到 SIGINT/SIGTERM */
+  cservice_destroy(svc);
+  return 0;
 }
