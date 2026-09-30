@@ -64,7 +64,7 @@
     "editor.defaultFormatter": "xaver.clang-format"
   },
   "[cpp]": {
-    "editor.defaultFormatter": "ms-vscode.cpptools"
+    "editor.defaultFormatter": "xaver.clang-format"
   },
   "clangd.path": "/usr/bin/clangd",
   "clang-format.executable": "/usr/bin/clang-format",

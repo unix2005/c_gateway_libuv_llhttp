@@ -2,7 +2,7 @@
 #define Q_MAPPER_INT_H
 
 #include "q_ds.h"
-#include "mapper.h"
+#include "q_mapper.h"
 
 /* ---------------- AST ---------------- */
 

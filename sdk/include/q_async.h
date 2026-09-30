@@ -16,18 +16,19 @@
 #include <uv.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-typedef void (*async_work_t)(void *data);   /* 在 worker 线程执行（可阻塞） */
-typedef void (*async_done_t)(void *data);   /* 在 loop 线程执行（回写响应） */
+    typedef void (*async_work_t)(void *data); /* 在 worker 线程执行（可阻塞） */
+    typedef void (*async_done_t)(void *data); /* 在 loop 线程执行（回写响应） */
 
-/**
- * 异步执行：work 在 worker 线程运行，done 在 loop 线程运行。
- * @param loop 必须是发起本请求的事件循环（cservice_req_loop(req) 获取）
- * @return 0 成功，<0 失败
- */
-int async_exec(uv_loop_t *loop, async_work_t work, async_done_t done, void *data);
+    /**
+     * 异步执行：work 在 worker 线程运行，done 在 loop 线程运行。
+     * @param loop 必须是发起本请求的事件循环（cservice_req_loop(req) 获取）
+     * @return 0 成功，<0 失败
+     */
+    int q_async_exec(uv_loop_t *loop, async_work_t work, async_done_t done, void *data);
 
 #ifdef __cplusplus
 }
