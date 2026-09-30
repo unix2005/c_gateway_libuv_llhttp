@@ -499,10 +499,18 @@ int q_result_next(q_result_t *r)
     return rc;
 }
 
+void q_result_set_owner(q_result_t *r, q_conn_t *conn)
+{
+    if (r != NULL) r->owner = conn;
+}
+
 void q_result_free(q_result_t *r)
 {
     if (r == NULL) return;
     if (r->drv != NULL && r->ops != NULL) r->ops->res_free(r->drv);
+    /* 结果消费完毕，归还关联连接：保证连接在取行期间独占，
+     * 避免缓存的预处理语句被并发请求重驱动导致 use-after-free。 */
+    if (r->owner != NULL) q_dbp_put(r->owner);
     free(r->row);
     free(r);
 }

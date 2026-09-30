@@ -12,53 +12,63 @@
  *
  * 编译：make -C sdk examples
  */
-#include <sm4.h>
 #include <q_log.h>
+#include <sm4.h>
 #include <stdio.h>
 #include <string.h>
 
 int main(int argc, char **argv)
 {
-    q_log_init("logs", "sm4_tool", Q_LOG_INFO);
+  q_log_init("logs", "sm4_tool", Q_LOG_INFO);
 
-    if (argc < 3) {
-        fprintf(stderr,
+  if (argc < 3)
+  {
+    fprintf(stderr,
             "用法:\n"
-            "  %s enc <明文>      用 SM4_KEY/SM4_IV(SM4-CBC) 加密，输出十六进制密文\n"
+            "  %s enc <明文>      用 SM4_KEY/SM4_IV(SM4-CBC) "
+            "加密，输出十六进制密文\n"
             "  %s dec <密文hex>   解密\n",
             argv[0], argv[0]);
-        return 2;
-    }
+    return 2;
+  }
 
-    int rc = q_sm4_init();
-    if (rc == Q_ERR) {
-        fprintf(stderr,
-            "SM4 初始化失败：未设置环境变量 SM4_KEY / SM4_IV\n");
-        return 1;
-    } else if (rc != Q_OK) {
-        fprintf(stderr,
-            "SM4 初始化失败：SM4_KEY / SM4_IV 需为 32 位十六进制（16 字节）\n");
-        return 1;
-    }
+  int rc = q_sm4_init();
+  if (rc == Q_ERR)
+  {
+    fprintf(stderr, "SM4 初始化失败：未设置环境变量 SM4_KEY / SM4_IV\n");
+    return 1;
+  }
+  else if (rc != Q_OK)
+  {
+    fprintf(stderr, "SM4 初始化失败：SM4_KEY / SM4_IV 需为 32 位十六进制（16 字节）\n");
+    return 1;
+  }
 
-    char buf[8192];
-    char err[256];
+  char buf[8192];
+  char err[256];
 
-    if (strcmp(argv[1], "enc") == 0) {
-        if (q_sm4_encrypt_str(argv[2], buf, sizeof(buf), err, sizeof(err)) != Q_OK) {
-            fprintf(stderr, "加密失败: %s\n", err);
-            return 1;
-        }
-        printf("%s\n", buf);
-    } else if (strcmp(argv[1], "dec") == 0) {
-        if (q_sm4_decrypt_str(argv[2], buf, sizeof(buf), err, sizeof(err)) != Q_OK) {
-            fprintf(stderr, "解密失败: %s\n", err);
-            return 1;
-        }
-        printf("%s\n", buf);
-    } else {
-        fprintf(stderr, "未知子命令: %s（请用 enc / dec）\n", argv[1]);
-        return 2;
+  if (strcmp(argv[1], "enc") == 0)
+  {
+    if (q_sm4_encrypt_str(argv[2], buf, sizeof(buf), err, sizeof(err)) != Q_OK)
+    {
+      fprintf(stderr, "加密失败: %s\n", err);
+      return 1;
     }
-    return 0;
+    printf("%s\n", buf);
+  }
+  else if (strcmp(argv[1], "dec") == 0)
+  {
+    if (q_sm4_decrypt_str(argv[2], buf, sizeof(buf), err, sizeof(err)) != Q_OK)
+    {
+      fprintf(stderr, "解密失败: %s\n", err);
+      return 1;
+    }
+    printf("%s\n", buf);
+  }
+  else
+  {
+    fprintf(stderr, "未知子命令: %s（请用 enc / dec）\n", argv[1]);
+    return 2;
+  }
+  return 0;
 }

@@ -96,6 +96,12 @@ static void my_res_free(void *res)
     my_result_t *mr = res;
     if (mr == NULL) return;
 
+    if (mr->kind == 1 && mr->stmt != NULL) {
+        /* 解除预处理语句对 out_buf 的绑定：out_buf 即将释放，而该 MYSQL_STMT*
+         * 可能被连接池按连接缓存并跨请求/线程复用；不解绑会留下悬空指针，
+         * 下次 bind 前若被 mysql_stmt_fetch 写入即触发 heap-use-after-free。 */
+        mysql_stmt_bind_result(mr->stmt, NULL);
+    }
     if (mr->kind == 0) {
         if (mr->res != NULL) mysql_free_result(mr->res);
     }

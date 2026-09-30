@@ -13,7 +13,7 @@
     <!-- worker 线程数（多 event-loop 模型）：默认 1。
          注意：当前并发请求路径存在堆损坏 bug（biz_work 在线程池并发时崩溃），
          >1 会在高并发下直接 SIGABRT，修复前请保持 1 -->
-    <threads>1</threads>
+    <threads>4</threads>
 
     <!-- 日志配置：dir 可为相对路径(相对启动目录)或绝对路径；level 取值
          trace / debug / info / warn / error / fatal（缺省 info） -->

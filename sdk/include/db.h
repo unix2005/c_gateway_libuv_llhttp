@@ -128,6 +128,7 @@ struct q_result {
     q_value_t        *row;            /* ncols 个，通用层分配 */
     uint64_t          affected;
     uint64_t          insert_id;
+    q_conn_t         *owner;          /* 关联连接：q_result_free 时归还池 */
 };
 
 typedef struct q_stmt {
@@ -168,6 +169,9 @@ void q_stmt_close(q_stmt_t *s);
 
 int  q_result_next(q_result_t *r);        /* 1=取到行，0=结束，<0 出错 */
 void q_result_free(q_result_t *r);
+/* 将结果关联的连接挂到结果上：q_result_free 消费完结果后自动归还连接池。
+ * 用于保持连接在取行期间独占，避免缓存的预处理语句被并发请求重驱动。 */
+void q_result_set_owner(q_result_t *r, q_conn_t *conn);
 
 /* 事务：作用于 ThreadLocal 连接，提交/回滚后自动归还 */
 int  q_tx_begin(q_conn_t *c);

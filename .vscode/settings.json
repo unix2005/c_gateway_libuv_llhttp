@@ -57,23 +57,20 @@
   "C_Cpp_Runner.useLinkTimeOptimization": false,
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
   "makefile.configureOnOpen": false,
-
-  
-    // 保存自动格式化
-    "editor.formatOnSave": true,
-    // C文件默认格式化器：微软C/C++内置clang-format
-    "[c]": {
-        "editor.defaultFormatter": "ms-vscode.cpptools"
-    },
-    "[cpp]": {
-        "editor.defaultFormatter": "ms-vscode.cpptools"
-    },
-    // 读取项目根目录 .clang-format
-    "C_Cpp.clang_format_style": "file",
-    // 找不到 .clang-format 时回退风格
-    "C_Cpp.clang_format_fallbackStyle": "LLVM",
-    // CodeBuddy AI生成代码遵守项目规则
-    "codebuddy.rules.enable": true
-
-
+  // 保存自动格式化
+  "editor.formatOnSave": true,
+  // C文件默认格式化器：微软C/C++内置clang-format
+  "[c]": {
+    "editor.defaultFormatter": "xaver.clang-format"
+  },
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  },
+  "clang-format.executable": "/usr/bin/clang-format",
+  // 读取项目根目录 .clang-format
+  "C_Cpp.clang_format_style": "file",
+  // 找不到 .clang-format 时回退风格
+  "C_Cpp.clang_format_fallbackStyle": "LLVM",
+  // CodeBuddy AI生成代码遵守项目规则
+  "codebuddy.rules.enable": true
 }
