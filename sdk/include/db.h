@@ -105,6 +105,7 @@ int                q_db_register(const q_db_driver_t *drv);
 const q_db_driver_t *q_db_find(const char *name);
 
 int q_db_register_mysql(void);        /* 各驱动自带的注册入口 */
+int q_db_register_oracle(void);       /* ODPI-C 驱动注册入口 */
 
 /* ---------------- 连接 / 结果 / 语句 ---------------- */
 

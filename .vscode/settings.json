@@ -66,6 +66,7 @@
   "[cpp]": {
     "editor.defaultFormatter": "ms-vscode.cpptools"
   },
+  "clangd.path": "/usr/bin/clangd",
   "clang-format.executable": "/usr/bin/clang-format",
   // 读取项目根目录 .clang-format
   "C_Cpp.clang_format_style": "file",

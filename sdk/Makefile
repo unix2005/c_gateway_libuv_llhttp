@@ -38,6 +38,17 @@ else
   $(info [db] 未找到 mariadb-connector-c，跳过 mysql 驱动（mock 仍可用）)
 endif
 
+# Oracle 驱动（ODPI-C，可选）：探测到 dpi.h 才编入，否则自动跳过。
+ORACLE_PREFIX ?= /home/qiao/open_src/odpi-26.0.0
+ifneq ($(wildcard $(ORACLE_PREFIX)/include/dpi.h),)
+  SRCS += $(SRC_DIR)/db/driver/oracle/q_db_oracle.c
+  INCS += -I$(ORACLE_PREFIX)/include
+  LIBS += -L$(ORACLE_PREFIX)/lib -lodpic
+  $(info [db] oracle 驱动已启用: $(ORACLE_PREFIX))
+else
+  $(info [db] 未找到 ODPI-C (dpi.h)，跳过 oracle 驱动（mock 仍可用）)
+endif
+
 OBJS    := $(SRCS:.c=.o)
 
 DIST    := dist

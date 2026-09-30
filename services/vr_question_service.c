@@ -294,6 +294,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
+#ifdef Q_ENABLE_ORACLE
+    /* 注册 Oracle 驱动（ODPI-C，构建期编入时才有此符号） */
+    if (q_db_register_oracle() != Q_OK)
+    {
+        fprintf(stderr, "[vr-question] 注册 oracle 驱动失败\n");
+        config_destroy(cfg);
+        return 1;
+    }
+#endif
+
     g_pool = q_dbp_new(dsn, db_max_open, db_idle, db_nshards);
     if (g_pool == NULL) 
     {
